@@ -20,14 +20,19 @@ The application should behave similar to a paper notebook.
     * change pen thickness
     * switch pen and eraser
     * turn pages
- * file format used is PNG or SVG
- * there is an in-application stylus calibration utility
+ * file format used is PNG or SVG (or xournal?)
 
 
 ## Compilation
 
+#### Compiling for x86 in QtCreator:
+
+Make sure that you compiled the SDK libraries
+from `https://github.com/onyx-intl/booxsdk/`
+and installed them to `/usr/local/lib`. Then just
+use `qmake` to compile or use QtCreator.
+
+#### Compiling for arm:
+
 TODO
 
-Do not forget to
-
-     git submodule update --init
