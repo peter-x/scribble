@@ -1,4 +1,5 @@
-QT += core network dbus sql gui
+QT += core network sql gui
+
 SOURCES += scribble.cpp \
     mainwidget.cpp \
     scribblearea.cpp
