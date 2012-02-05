@@ -16,10 +16,12 @@ class MyApplication : public onyx::Application {
     }
 
     virtual int exec() {
+        Q_INIT_RESOURCE(onyx_ui_images);
         sys::SysStatus::instance().setSystemBusy(false);
 
         mainWidget = new MainWidget();
-        mainWidget->showFullScreen();
+        mainWidget->loadFile(QFile("test.xoj"));
+        mainWidget->show();//FullScreen();
 
         return 0;
     }

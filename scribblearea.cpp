@@ -6,7 +6,7 @@
 static const QString SCRIBBLE_PATH = "scribble_doc";
 
 ScribbleArea::ScribbleArea(QWidget *parent) :
-    QWidget(parent, Qt::FramelessWindowHint), sketchProxy(0)
+    QWidget(parent, Qt::FramelessWindowHint), sketchProxy(0), currentPage(0)
 {
     setAutoFillBackground(true);
     setBackgroundRole(QPalette::Base);
@@ -44,7 +44,17 @@ void ScribbleArea::updateSketchProxy()
 void ScribbleArea::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
+    if (currentPage == 0) return;
 
+    painter.setRenderHint(QPainter::Antialiasing);
+    foreach (const ScribbleLayer &l, currentPage->layers) {
+        foreach (const ScribbleStroke &s, l.items) {
+            painter.setPen(s.pen);
+            painter.drawPolyline(s.points);
+        }
+    }
+
+#if 0
     // update zoom factor
     sketchProxy->setZoom(ZOOM_ACTUAL);
     sketchProxy->setContentOrient(ROTATE_0_DEGREE);
@@ -58,6 +68,7 @@ void ScribbleArea::paintEvent(QPaintEvent *)
 
     sketchProxy->updatePageDisplayRegion(SCRIBBLE_PATH, page_key, page_area);
     sketchProxy->paintPage(SCRIBBLE_PATH, page_key, painter);
+#endif
 }
 
 bool ScribbleArea::event(QEvent *e)
@@ -73,4 +84,20 @@ bool ScribbleArea::event(QEvent *e)
         break;
     }
     return QWidget::event(e);
+}
+
+void ScribbleArea::setModeShapeColor(const ui::SketchMode m,
+                                     const ui::SketchShape s,
+                                     const ui::SketchColor c)
+{
+    sketchProxy->setMode(m);
+    sketchProxy->setShape(s);
+    sketchProxy->setColor(c);
+}
+
+void ScribbleArea::renderPage(ScribblePage *page)
+{
+    /* TODO dangerous, because it can be freed */
+    currentPage = page;
+    update();
 }
