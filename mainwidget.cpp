@@ -8,10 +8,9 @@ MainWidget::MainWidget(QWidget *parent) :
 {
     document = new ScribbleDocument(this);
 
-    /* TODO check ownership transfer and destructor */
-    QToolBar *toolbar = new QToolBar(this);
     scribbleArea = new ScribbleArea(this);
 
+    QToolBar *toolbar = new QToolBar(this);
     /* TODO use action groups */
 
     QAction *left = new QAction(QIcon(":/images/left_arrow.png"),
@@ -48,9 +47,18 @@ MainWidget::MainWidget(QWidget *parent) :
 
 void MainWidget::loadFile(const QFile &file)
 {
+    /* TODO check return value */
     document->loadXournalFile(file);
-    if (!document->pages.isEmpty())
-        scribbleArea->renderPage(&(document->pages[0]));
+    scribbleArea->setPageLayer(document->pages.length() - 1,
+                               document->pages.last().layers.length() - 1);
+}
+
+ScribblePage *MainWidget::getPage(int num)
+{
+    if (num < 0 || num >= document->pages.length())
+        return 0;
+    else
+        return &(document->pages[num]);
 }
 
 void MainWidget::keyPressEvent(QKeyEvent *event)
@@ -65,18 +73,12 @@ void MainWidget::keyPressEvent(QKeyEvent *event)
 
 void MainWidget::usePen()
 {
-    scribbleArea->setModeShapeColor(ui::MODE_SKETCHING,
-                                    ui::SKETCH_SHAPE_0,
-                                    ui::SKETCH_COLOR_BLACK);
+    scribbleArea->setModeSizeColor(ScribbleArea::PEN, 3, QColor("#000000"));
 }
 
 void MainWidget::useEraser()
 {
-    /* TODO real erase does not seem to work */
-    scribbleArea->setModeShapeColor(ui::MODE_SKETCHING,
-                                    ui::SKETCH_SHAPE_4,
-                                    ui::SKETCH_COLOR_WHITE);
-
+    scribbleArea->setModeSizeColor(ScribbleArea::ERASER, 8, QColor("#000000"));
 }
 
 void MainWidget::save()

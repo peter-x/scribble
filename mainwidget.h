@@ -3,6 +3,8 @@
 
 #include <QtGui>
 
+class MainWidget;
+
 #include "scribblearea.h"
 #include "scribble_document.h"
 
@@ -12,6 +14,8 @@ class MainWidget : public QWidget
 public:
     explicit MainWidget(QWidget *parent = 0);
     void loadFile(const QFile&);
+
+    ScribblePage *getPage(int num);
 
 signals:
 

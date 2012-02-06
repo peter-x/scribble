@@ -143,6 +143,15 @@ bool XournalXMLHandler::ignorableWhitespace(const QString &ch)
 
 bool XournalXMLHandler::endDocument()
 {
+    if (pages.isEmpty()) {
+        pages.append(ScribblePage());
+    }
+    for (int i = 0; i < pages.length(); i ++) {
+        if (pages[i].layers.isEmpty()) {
+            pages[i].layers.append(ScribbleLayer());
+        }
+    }
+
     return true;
 }
 

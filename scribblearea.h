@@ -3,22 +3,24 @@
 
 #include <QWidget>
 
-#include "onyx/data/sketch_proxy.h"
+class ScribbleArea;
 
+#include "mainwidget.h"
 #include "scribble_document.h"
+
 
 
 class ScribbleArea : public QWidget
 {
     Q_OBJECT
 public:
-    explicit ScribbleArea(QWidget *parent = 0);
-    void setModeShapeColor(const ui::SketchMode, const ui::SketchShape,
-                           const ui::SketchColor);
+    enum ScribbleMode {
+        PEN, ERASER
+    };
 
-    /* TODO preliminary method to check if loading works,
-      should be expanded to MVC pattern */
-    void renderPage(ScribblePage *page);
+    explicit ScribbleArea(MainWidget *parent);
+    void setPageLayer(int page, int layer);
+    void setModeSizeColor(ScribbleMode mode, float size, const QColor &color);
 
 signals:
 
@@ -26,13 +28,22 @@ public slots:
 
 private:
     void paintEvent(QPaintEvent *);
-    bool event(QEvent *);
-    void updateSketchProxy();
+    void mousePressEvent(QMouseEvent *);
+    void mouseMoveEvent(QMouseEvent *);
+    void mouseReleaseEvent(QMouseEvent *);
 
-    sketch::SketchProxy *sketchProxy;
+    void eraseAt(const QPointF &point);
 
-    ScribblePage *currentPage;
+    MainWidget *mainWidget;
 
+    QPen currentPen;
+
+    bool sketching;
+    QPolygonF currentStroke;
+
+    ScribbleMode currentMode;
+    int currentPage;
+    int currentLayer;
 };
 
 #endif // SCRIBBLEAREA_H
