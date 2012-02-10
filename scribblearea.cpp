@@ -18,6 +18,7 @@ ScribbleArea::ScribbleArea(QWidget *parent) :
     setBackgroundRole(QPalette::Base);
 
     onyx::screen::watcher().addWatcher(this);
+    connect(&touchListener, SIGNAL(touchData(TouchData &)), this, SLOT(touchEventDataReceived(TouchData &)));
 }
 
 void ScribbleArea::pageChanged(ScribblePage *page, int layer)
@@ -105,6 +106,47 @@ void ScribbleArea::mouseReleaseEvent(QMouseEvent *event)
     }
 
     sketching = false;
+}
+
+void ScribbleArea::touchEventDataReceived(TouchData &data)
+{
+    // get widget pos
+    OnyxTouchPoint &touch_point = data.points[0];
+    QPoint global_pos(touch_point.x, touch_point.y);
+    QPoint widget_pos = mapFromGlobal(global_pos);
+
+    // check whether the point is in widget
+    if (widget_pos.x() < 0 || widget_pos.y() < 0 ||
+        widget_pos.x() > width() || widget_pos.y() > height())
+    {
+        // qDebug("Out of boundary");
+        return;
+    }
+
+    // construct a mouse event
+    QEvent::Type type = QEvent::MouseMove;
+    if (pressure_of_last_point_ == 0 && touch_point.pressure > 0)
+        type = QEvent::MouseButtonPress;
+    if (pressure_of_last_point_ > 0 && touch_point.pressure <= 0)
+        type = QEvent::MouseButtonRelease;
+    /* TODO can we adjust the size depending on pressure? */
+
+    QMouseEvent me(type, widget_pos, global_pos, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    switch (type)
+    {
+    case QEvent::MouseButtonPress:
+        mousePressEvent(&me);
+        break;
+    case QEvent::MouseMove:
+        mouseMoveEvent(&me);
+        break;
+    case QEvent::MouseButtonRelease:
+        mouseReleaseEvent(&me);
+        break;
+    default:
+        break;
+    }
+    pressure_of_last_point_ = touch_point.pressure;
 }
 
 void ScribbleArea::eraseAt(const QPointF &point)

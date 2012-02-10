@@ -43,10 +43,10 @@ private:
     ScribbleArea *scribbleArea;
     ScribbleDocument *document;
 
-    ScribbleArea::ScribbleMode currentMode; /* TODO duplication */
-    int currentSize; /* TODO duplication */
     int currentPage;
     int currentLayer;
+    ScribbleArea::ScribbleMode currentMode; /* TODO duplication */
+    int currentSize; /* TODO duplication */
 };
 
 #endif // MAINWIDGET_H

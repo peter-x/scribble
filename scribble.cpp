@@ -20,8 +20,8 @@ class MyApplication : public onyx::Application {
         sys::SysStatus::instance().setSystemBusy(false);
 
         mainWidget = new MainWidget();
-        mainWidget->loadFile(QFile("test.xoj"));
-        mainWidget->show();//FullScreen();
+        //mainWidget->loadFile(QFile("test.xoj"));
+        mainWidget->showFullScreen();
 
         return 0;
     }

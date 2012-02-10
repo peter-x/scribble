@@ -4,9 +4,12 @@
 #include "onyx/screen/screen_update_watcher.h"
 
 MainWidget::MainWidget(QWidget *parent) :
-    QWidget(parent)
+    QWidget(parent), currentPage(0), currentLayer(0),
+    currentMode(ScribbleArea::PEN), currentSize(1)
 {
     document = new ScribbleDocument(this);
+    document->pages.append(ScribblePage());
+    document->pages[0].layers.append(ScribbleLayer());
 
     scribbleArea = new ScribbleArea(this);
 
