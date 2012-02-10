@@ -20,7 +20,7 @@ The application should behave similar to a paper notebook.
     * change pen thickness
     * switch pen and eraser
     * turn pages
- * file format used is PNG or SVG (or xournal?)
+ * file format used is Xournal
 
 
 ## Compilation

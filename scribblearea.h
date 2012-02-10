@@ -3,12 +3,7 @@
 
 #include <QWidget>
 
-class ScribbleArea;
-
-#include "mainwidget.h"
 #include "scribble_document.h"
-
-
 
 class ScribbleArea : public QWidget
 {
@@ -18,13 +13,13 @@ public:
         PEN, ERASER
     };
 
-    explicit ScribbleArea(MainWidget *parent);
-    void setPageLayer(int page, int layer);
+    explicit ScribbleArea(QWidget *parent);
     void setModeSizeColor(ScribbleMode mode, float size, const QColor &color);
 
 signals:
 
 public slots:
+    void pageChanged(ScribblePage *page, int layer);
 
 private:
     void paintEvent(QPaintEvent *);
@@ -34,7 +29,8 @@ private:
 
     void eraseAt(const QPointF &point);
 
-    MainWidget *mainWidget;
+    ScribblePage *currentPage;
+    int currentLayer;
 
     QPen currentPen;
 
@@ -42,8 +38,6 @@ private:
     QPolygonF currentStroke;
 
     ScribbleMode currentMode;
-    int currentPage;
-    int currentLayer;
 };
 
 #endif // SCRIBBLEAREA_H

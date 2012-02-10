@@ -1,12 +1,16 @@
 #include "scribblearea.h"
 
+#include <QPainter>
+#include <QPen>
+#include <QMouseEvent>
+
 #include "onyx/screen/screen_proxy.h"
 #include "onyx/screen/screen_update_watcher.h"
 
 static const QString SCRIBBLE_PATH = "scribble_doc";
 
-ScribbleArea::ScribbleArea(MainWidget *parent) :
-    QWidget(parent, Qt::FramelessWindowHint), mainWidget(parent),
+ScribbleArea::ScribbleArea(QWidget *parent) :
+    QWidget(parent, Qt::FramelessWindowHint),
     sketching(false)
 {
     setMinimumSize(100, 100);
@@ -16,7 +20,7 @@ ScribbleArea::ScribbleArea(MainWidget *parent) :
     onyx::screen::watcher().addWatcher(this);
 }
 
-void ScribbleArea::setPageLayer(int page, int layer)
+void ScribbleArea::pageChanged(ScribblePage *page, int layer)
 {
     currentPage = page;
     currentLayer = layer;
@@ -37,12 +41,11 @@ void ScribbleArea::paintEvent(QPaintEvent *)
     /* TODO only paint event->rect() */
     QPainter painter(this);
 
-    ScribblePage *page = mainWidget->getPage(currentPage);
-    if (page == 0) return;
+    if (currentPage == 0) return;
 
     painter.setRenderHint(QPainter::Antialiasing);
-    for (int li = 0; li < page->layers.length(); li ++) {
-        const ScribbleLayer &l = page->layers[li];
+    for (int li = 0; li < currentPage->layers.length(); li ++) {
+        const ScribbleLayer &l = currentPage->layers[li];
         foreach (const ScribbleStroke &s, l.items) {
             painter.setPen(s.pen);
             painter.drawPolyline(s.points);
@@ -94,11 +97,11 @@ void ScribbleArea::mouseReleaseEvent(QMouseEvent *event)
 
         currentStroke.clear();
 
-        ScribblePage *page = mainWidget->getPage(currentPage);
-        if (page == 0) return;
+        if (currentPage == 0) return;
 
-        /* TODO error if layer does not exist */
-        page->layers[currentLayer].items.append(stroke);
+        if (currentLayer >= 0)
+            /* TODO produce some error earlier */
+            currentPage->layers[currentLayer].items.append(stroke);
     }
 
     sketching = false;
@@ -106,11 +109,12 @@ void ScribbleArea::mouseReleaseEvent(QMouseEvent *event)
 
 void ScribbleArea::eraseAt(const QPointF &point)
 {
-    ScribblePage *page = mainWidget->getPage(currentPage);
-    if (page == 0) return;
+    if (currentPage == 0) return;
 
     /* TODO error if layer does not exist */
-    ScribbleLayer &layer = page->layers[currentLayer];
+    if (currentLayer < 0)
+        return;
+    ScribbleLayer &layer = currentPage->layers[currentLayer];
 
     float width = currentPen.widthF();
     float halfWidthSq = width * width / 4.0;

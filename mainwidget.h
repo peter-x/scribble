@@ -3,8 +3,6 @@
 
 #include <QtGui>
 
-class MainWidget;
-
 #include "scribblearea.h"
 #include "scribble_document.h"
 
@@ -16,6 +14,9 @@ public:
     void loadFile(const QFile&);
 
     ScribblePage *getPage(int num);
+    ScribblePage *getCurrentPage();
+    int getCurrentPageNumber();
+    int getCurrentLayer();
 
 signals:
 
@@ -25,15 +26,27 @@ public slots:
 private slots:
     void usePen();
     void useEraser();
+    void previousPage();
+    void nextPage();
+    void sizeThin();
+    void sizeMedium();
+    void sizeThick();
 
 
 protected:
     void keyPressEvent(QKeyEvent *);
 
 private:
+    void updateModeSizeColor();
+
     QDir data_dir;
     ScribbleArea *scribbleArea;
     ScribbleDocument *document;
+
+    ScribbleArea::ScribbleMode currentMode; /* TODO duplication */
+    int currentSize; /* TODO duplication */
+    int currentPage;
+    int currentLayer;
 };
 
 #endif // MAINWIDGET_H
