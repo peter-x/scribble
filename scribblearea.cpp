@@ -11,10 +11,11 @@ static const QString SCRIBBLE_PATH = "scribble_doc";
 
 ScribbleArea::ScribbleArea(QWidget *parent) :
     QWidget(parent, Qt::FramelessWindowHint),
+    currentPage(0),
     sketching(false)
 {
     setMinimumSize(100, 100);
-    setAutoFillBackground(true);
+    setAutoFillBackground(false); /* TODO change */
     setBackgroundRole(QPalette::Base);
 
     onyx::screen::watcher().addWatcher(this);
@@ -39,23 +40,63 @@ void ScribbleArea::setModeSizeColor(ScribbleMode mode, float size, const QColor 
 
 void ScribbleArea::paintEvent(QPaintEvent *)
 {
+    return;
     /* TODO only paint event->rect() */
     QPainter painter(this);
 
     if (currentPage == 0) return;
 
     painter.setRenderHint(QPainter::Antialiasing);
+    /* TODO Xournal only paints up to current layer */
     for (int li = 0; li < currentPage->layers.length(); li ++) {
         const ScribbleLayer &l = currentPage->layers[li];
         foreach (const ScribbleStroke &s, l.items) {
             painter.setPen(s.pen);
-            painter.drawPolyline(s.points);
+            //painter.drawPolyline(s.points);
+            /* TODO update currently does not work on eink */
+#if 0
+            for (int pi = 0; pi + 1 < s.points.size(); pi ++) {
+                qDebug() << "Drawing line: " << s.points[pi].x() << "," << s.points[pi].y() << "," <<
+                            s.points[pi + 1].x() << "," << s.points[pi + 1].y() << "," <<
+                            0x00 /* color */ << "," <<
+                        1 /* size */;
+                onyx::screen::instance().drawLine(s.points[pi].x(), s.points[pi].y(),
+                                                  s.points[pi + 1].x(), s.points[pi + 1].y(),
+                                                  0x00 /* color */,
+                                                  1 /* size */);
+            }
+#endif
+            /* TODO it seems that drawLine is broken and drawLines works (at least for a single line) */
+            {
+                QPolygon strokeInt(s.points.toPolygon());
+
+                onyx::screen::instance().drawLines(strokeInt.data(), strokeInt.size(), 0x00, 2);
+            }
         }
         if (li == currentLayer && sketching && currentMode == PEN) {
             painter.setPen(currentPen);
             painter.drawPolyline(currentStroke);
+#if 0
+            for (int pi = 0; pi + 1 < currentStroke.size(); pi ++) {
+                qDebug() << "Drawing line: " << currentStroke[pi].x() << "," << currentStroke[pi].y() << "," <<
+                            currentStroke[pi + 1].x() << "," << currentStroke[pi + 1].y() << "," <<
+                            0x00 /* color */ << "," <<
+                        1 /* size */;
+                onyx::screen::instance().drawLine(currentStroke[pi].x(), currentStroke[pi].y(),
+                                                  currentStroke[pi + 1].x(), currentStroke[pi + 1].y(),
+                                                  0x00 /* color */,
+                                                  1 /* size */);
+            }
+#endif
+            /* TODO it seems that drawLine is broken and drawLines works (at least for a single line) */
+            {
+                QPolygon currentStrokeInt(currentStroke.toPolygon());
+
+                onyx::screen::instance().drawLines(currentStrokeInt.data(), currentStrokeInt.size(), 0x00, 2);
+            }
         }
     }
+    //onyx::screen::instance().updateScreen(onyx::screen::ScreenProxy::DW, onyx::screen::ScreenCommand::WAIT_ALL);
 }
 
 void ScribbleArea::mousePressEvent(QMouseEvent *event)
@@ -75,7 +116,19 @@ void ScribbleArea::mouseMoveEvent(QMouseEvent *event)
     if (!sketching) return;
     if (currentMode == PEN) {
         currentStroke.append(event->pos());
-        update();
+        //QPolygon currentStrokeInt(currentStroke.toPolygon());
+
+        if (currentStroke.size() >= 2) {
+            int s = currentStroke.size();
+            QPoint p1(mapToGlobal(currentStroke[s - 1].toPoint()));
+            QPoint p2(mapToGlobal(currentStroke[s - 2].toPoint()));
+            QVector<QPoint> line;
+            line.push_back(p1);
+            line.push_back(p2);
+            onyx::screen::instance().drawLines(line.data(), 2, 0x00, 1);
+        }
+//        onyx::screen::instance().drawLines(currentStrokeInt.data(), currentStrokeInt.size(), 0x00, 2);
+//        update();
     } else {
         eraseAt(event->pos());
     }
@@ -90,7 +143,7 @@ void ScribbleArea::mouseReleaseEvent(QMouseEvent *event)
         update();
     } else {
         currentStroke.append(event->pos());
-        update();
+        //update();
 
         ScribbleStroke stroke;
         stroke.pen = currentPen;

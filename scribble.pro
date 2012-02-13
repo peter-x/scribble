@@ -1,5 +1,8 @@
 QT += core network sql gui
 
+CONFIG += debug
+CONFIG -= release
+
 SOURCES += scribble.cpp \
     mainwidget.cpp \
     scribblearea.cpp \
