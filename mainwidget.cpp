@@ -4,33 +4,37 @@
 #include "onyx/screen/screen_update_watcher.h"
 
 MainWidget::MainWidget(QWidget *parent) :
-    QWidget(parent), currentPage(0), currentLayer(0),
-    currentMode(ScribbleArea::PEN), currentSize(1)
+    QWidget(parent)
 {
     document = new ScribbleDocument(this);
-    document->pages.append(ScribblePage());
-    document->pages[0].layers.append(ScribbleLayer());
-
     scribbleArea = new ScribbleArea(this);
+
+    connect(document, SIGNAL(pageOrLayerChanged(ScribblePage,int)), scribbleArea, SLOT(redrawPage(ScribblePage,int)));
+    connect(document, SIGNAL(strokePointAdded(ScribbleStroke)), scribbleArea, SLOT(drawStrokePoint(ScribbleStroke)));
+    connect(document, SIGNAL(strokeCompleted(ScribbleStroke)), scribbleArea, SLOT(drawCompletedStroke(ScribbleStroke)));
+    connect(document, SIGNAL(strokesChanged(ScribblePage,int,QRectF)), scribbleArea, SLOT(updateStrokesInRegion(ScribblePage,int,QRectF)));
+
+    connect(&touchListener, SIGNAL(touchData(TouchData &)), this, SLOT(touchEventDataReceived(TouchData &)));
 
     QToolBar *toolbar = new QToolBar(this);
     /* TODO use action groups */
 
     QAction *left = new QAction(QIcon(":/images/left_arrow.png"),
                                 "previous page", this);
-    connect(left, SIGNAL(triggered()), this, SLOT(previousPage()));
+    connect(left, SIGNAL(triggered()), document, SLOT(previousPage()));
     toolbar->addAction(left);
 
     QAction *pen = new QAction(QIcon(":images/sketch_mode_sketch.png"),
                                "pen", this);
-    connect(pen, SIGNAL(triggered()), this, SLOT(usePen()));
+    connect(pen, SIGNAL(triggered()), document, SLOT(usePen()));
     toolbar->addAction(pen);
 
     QAction *eraser = new QAction(QIcon(":images/sketch_mode_erase.png"),
                                "eraser", this);
-    connect(eraser, SIGNAL(triggered()), this, SLOT(useEraser()));
+    connect(eraser, SIGNAL(triggered()), document, SLOT(useEraser()));
     toolbar->addAction(eraser);
 
+    /*
     QAction *thin = new QAction(QIcon(":images/sketch_shape_1.png"),
                                "thin", this);
     connect(thin, SIGNAL(triggered()), this, SLOT(sizeThin()));
@@ -45,10 +49,11 @@ MainWidget::MainWidget(QWidget *parent) :
                                "thin", this);
     connect(thick, SIGNAL(triggered()), this, SLOT(sizeThick()));
     toolbar->addAction(thick);
+    */
 
     QAction *right = new QAction(QIcon(":/images/right_arrow.png"),
                                 "next page", this);
-    connect(right, SIGNAL(triggered()), this, SLOT(nextPage()));
+    connect(right, SIGNAL(triggered()), document, SLOT(nextPage()));
     toolbar->addAction(right);
 
     /* TODO need UI methods for:
@@ -79,34 +84,6 @@ void MainWidget::loadFile(const QFile &file)
 {
     /* TODO check return value */
     document->loadXournalFile(file);
-    currentPage = 0;
-    currentLayer = getCurrentPage()->layers.length() - 1;
-    scribbleArea->pageChanged(getCurrentPage(), currentLayer);
-}
-
-ScribblePage *MainWidget::getPage(int num)
-{
-    if (num < 0 || num >= document->pages.length())
-        return 0;
-    else
-        return &(document->pages[num]);
-}
-
-ScribblePage *MainWidget::getCurrentPage()
-{
-    if (currentPage < 0 || document == 0 || currentPage >= document->pages.length())
-        return 0;
-    return &(document->pages[currentPage]);
-}
-
-int MainWidget::getCurrentPageNumber()
-{
-    return currentPage;
-}
-
-int MainWidget::getCurrentLayer()
-{
-    return currentLayer;
 }
 
 void MainWidget::keyPressEvent(QKeyEvent *event)
@@ -119,78 +96,45 @@ void MainWidget::keyPressEvent(QKeyEvent *event)
     }
 }
 
-void MainWidget::updateModeSizeColor()
+void MainWidget::touchEventDataReceived(TouchData &data)
 {
-    int size = currentMode == ScribbleArea::PEN ? currentSize : currentSize * 4;
-    scribbleArea->setModeSizeColor(currentMode, size, QColor("#000000"));
-}
+    // get widget pos
+    OnyxTouchPoint &touch_point = data.points[0];
+    QPoint global_pos(touch_point.x, touch_point.y);
+    QPoint widget_pos = scribbleArea->mapFromGlobal(global_pos);
 
-void MainWidget::usePen()
-{
-    currentMode = ScribbleArea::PEN;
-    updateModeSizeColor();
-}
-
-void MainWidget::useEraser()
-{
-    currentMode = ScribbleArea::ERASER;
-    updateModeSizeColor();
-}
-
-void MainWidget::previousPage()
-{
-    if (currentPage <= 0) return;
-    currentPage -= 1;
-
-    ScribblePage *page = getCurrentPage();
-    if (page == 0) {
-        currentLayer = 0;
-    } else {
-        currentLayer = qMin(currentLayer, page->layers.length() - 1);
-    }
-
-    scribbleArea->pageChanged(page, currentLayer);
-}
-
-void MainWidget::nextPage()
-{
-    if (document == 0)
+    // check whether the point is in widget
+    if (widget_pos.x() < 0 || widget_pos.y() < 0 ||
+        widget_pos.x() > width() || widget_pos.y() > height())
+    {
+        // qDebug("Out of boundary");
         return;
-    if (currentPage + 1 >= document->pages.length()) {
-        /* create new page */
-        ScribblePage p;
-        p.layers.append(ScribbleLayer());
-        document->pages.append(p);
-        currentPage = document->pages.length() - 1;
-    } else {
-        currentPage += 1;
     }
 
-    ScribblePage *page = getCurrentPage();
-    if (page == 0) {
-        currentLayer = 0;
-    } else {
-        currentLayer = qMin(currentLayer, page->layers.length() - 1);
+    // construct a mouse event
+    QEvent::Type type = QEvent::MouseMove;
+    if (pressure_of_last_point_ == 0 && touch_point.pressure > 0)
+        type = QEvent::MouseButtonPress;
+    if (pressure_of_last_point_ > 0 && touch_point.pressure <= 0)
+        type = QEvent::MouseButtonRelease;
+    /* TODO can we adjust the size depending on pressure? */
+
+    QMouseEvent me(type, widget_pos, global_pos, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    switch (type)
+    {
+    case QEvent::MouseButtonPress:
+        document->mousePressEvent(&me);
+        break;
+    case QEvent::MouseMove:
+        document->mouseMoveEvent(&me);
+        break;
+    case QEvent::MouseButtonRelease:
+        document->mouseReleaseEvent(&me);
+        break;
+    default:
+        break;
     }
-    scribbleArea->pageChanged(page, currentLayer);
-}
-
-void MainWidget::sizeThin()
-{
-    currentSize = 1;
-    updateModeSizeColor();
-}
-
-void MainWidget::sizeMedium()
-{
-    currentSize = 2;
-    updateModeSizeColor();
-}
-
-void MainWidget::sizeThick()
-{
-    currentSize = 3;
-    updateModeSizeColor();
+    pressure_of_last_point_ = touch_point.pressure;
 }
 
 void MainWidget::save()

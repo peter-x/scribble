@@ -6,49 +6,6 @@
 
 #include "zlib.h"
 
-ScribbleDocument::ScribbleDocument(QObject *parent) :
-    QObject(parent)
-{
-}
-
-bool ScribbleDocument::loadXournalFile(const QFile &file)
-{
-    /* TODO do we have to free anything during file name conversion? */
-    gzFile f = gzopen(file.fileName().toLocal8Bit().constData(), "r");
-    if (f == 0) {
-        return false;
-    }
-
-    QByteArray data;
-
-    {
-        char buffer[1024];
-        while (!gzeof(f)) {
-            int len = gzread(f, buffer, 1024);
-            if (len < 0) {
-                gzclose(f);
-                return false;
-            }
-            data.append(buffer, len);
-        }
-        gzclose(f);
-    }
-
-    QBuffer dataBuffer(&data);
-    QXmlInputSource source(&dataBuffer);
-    QXmlSimpleReader reader;
-    XournalXMLHandler handler;
-    reader.setContentHandler(&handler);
-    reader.setErrorHandler(&handler);
-    if (!reader.parse(&source, false)) {
-        return false;
-    }
-
-    title = handler.getTitle();
-    pages = handler.getPages();
-    return true;
-}
-
 XournalXMLHandler::XournalXMLHandler()
 {
     xournal_colors["black"] = QColor("#000000");
@@ -162,4 +119,227 @@ bool XournalXMLHandler::fatalError(const QXmlParseException & exception)
                << exception.message();
 
     return false;
+}
+
+
+/* --------------------------------------------------------------- */
+
+ScribbleDocument::ScribbleDocument(QObject *parent) :
+    QObject(parent), title(""), sketching(false), currentMode(PEN)
+{
+  pages.append(ScribblePage());
+  pages[0].layers.append(ScribbleLayer());
+  currentPage = currentLayer = 0;
+
+  currentPen.setColor(QColor(0, 0, 0));
+  currentPen.setWidth(1);
+}
+
+bool ScribbleDocument::loadXournalFile(const QFile &file)
+{
+    /* TODO do we have to free anything during file name conversion? */
+    gzFile f = gzopen(file.fileName().toLocal8Bit().constData(), "r");
+    if (f == 0) {
+        return false;
+    }
+
+    QByteArray data;
+
+    {
+        char buffer[1024];
+        while (!gzeof(f)) {
+            int len = gzread(f, buffer, 1024);
+            if (len < 0) {
+                gzclose(f);
+                return false;
+            }
+            data.append(buffer, len);
+        }
+        gzclose(f);
+    }
+
+    QBuffer dataBuffer(&data);
+    QXmlInputSource source(&dataBuffer);
+    QXmlSimpleReader reader;
+    XournalXMLHandler handler;
+    reader.setContentHandler(&handler);
+    reader.setErrorHandler(&handler);
+    if (!reader.parse(&source, false)) {
+        return false;
+    }
+
+    title = handler.getTitle();
+    pages = handler.getPages();
+    currentPage = 0;
+    currentLayer = getCurrentPage().layers.length() - 1;
+
+    emit pageOrLayerChanged(getCurrentPage(), currentLayer);
+    return true;
+}
+
+bool ScribbleDocument::setCurrentPage(int index)
+{
+    if (index < 0 || index >= pages.length())
+        return false;
+    currentPage = index;
+    currentLayer = qMin(currentLayer, getCurrentPage().layers.length() - 1);
+    emit pageOrLayerChanged(getCurrentPage(), currentLayer);
+    return true;
+}
+
+void ScribbleDocument::nextPage()
+{
+    if (currentPage + 1 >= pages.length()) {
+        ScribblePage p;
+        p.layers.append(ScribbleLayer());
+        pages.append(p);
+    }
+    setCurrentPage(currentPage + 1);
+}
+
+void ScribbleDocument::previousPage()
+{
+    setCurrentPage(currentPage - 1);
+}
+
+void ScribbleDocument::layerUp()
+{
+    ScribblePage &p = pages[currentPage];
+    if (currentLayer + 1 >= p.layers.length()) {
+        p.layers.append(ScribbleLayer());
+    }
+    currentLayer += 1;
+    emit pageOrLayerChanged(getCurrentPage(), currentLayer);
+}
+
+void ScribbleDocument::layerDown()
+{
+    if (currentLayer == 0) return;
+    currentLayer -= 1;
+    emit pageOrLayerChanged(getCurrentPage(), currentLayer);
+}
+
+void ScribbleDocument::mousePressEvent(QMouseEvent *event)
+{
+    /* TODO currentStroke needs to be part of the page, otherwise
+     * complete repaint event handles will not paint it */
+    /* TODO what to do if not empty? */
+    currentStroke.points.clear();
+    currentStroke.pen = currentPen;
+    sketching = true;
+    if (currentMode == PEN) {
+        currentStroke.points.append(event->pos());
+        emit strokePointAdded(currentStroke);
+    } else {
+        eraseAt(event->pos());
+    }
+}
+
+void ScribbleDocument::mouseMoveEvent(QMouseEvent *event)
+{
+    if (!sketching) return;
+    if (currentMode == PEN) {
+        currentStroke.points.append(event->pos());
+        emit strokePointAdded(currentStroke);
+    } else {
+        eraseAt(event->pos());
+    }
+}
+
+void ScribbleDocument::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (!sketching) return;
+
+    if (currentMode == PEN) {
+        currentStroke.points.append(event->pos());
+        emit strokePointAdded(currentStroke);
+
+        /* TODO do we need to copy? */
+        pages[currentPage].layers[currentLayer].items.append(currentStroke);
+        emit strokeCompleted(currentStroke);
+        currentStroke.points.clear();
+        qDebug() << "This should not be empty: " << pages[currentPage].layers[currentLayer].items.last().points;
+    } else {
+        eraseAt(event->pos());
+    }
+
+    sketching = false;
+}
+
+void ScribbleDocument::eraseAt(const QPointF &point)
+{
+    ScribbleLayer &layer = pages[currentPage].layers[currentLayer];
+
+    float width = currentPen.widthF();
+    float halfWidthSq = width * width / 4.0;
+    QRectF eraserBox;
+    eraserBox.setSize(QSizeF(width, width));
+    eraserBox.moveCenter(point);
+
+    bool somethingHappened = false;
+
+    QList<ScribbleStroke> newStrokes;
+    for (int i = 0; i < layer.items.length(); i ++) {
+        ScribbleStroke &s = layer.items[i];
+        /* bounding rect with zero width or height produces not the intended result */
+        QRectF bound = s.points.boundingRect();
+        bound.adjust(-1, -1, 1, 1);
+        if (!bound.intersects(eraserBox))
+            continue;
+
+        /* we only check intersections with points, not
+         * line segments */
+        int retainSequenceStartIndex = 0;
+        for (int j = 0; j < s.points.size(); j ++) {
+            QPointF p = s.points[j] - point;
+            float d = p.x() * p.x() + p.y() * p.y();
+            if (d < halfWidthSq) {
+                /* remove this point */
+                if (retainSequenceStartIndex >= 0) {
+                    /* did not remove last point */
+                    ScribbleStroke newStroke;
+                    newStroke.pen = s.pen;
+                    newStroke.points = s.points.mid(retainSequenceStartIndex,
+                                                    j - retainSequenceStartIndex);
+                    newStrokes.append(newStroke);
+                    retainSequenceStartIndex = -1;
+                } else {
+                    /* also removed last point, do nothing */
+                }
+            } else {
+                /* retain this point */
+                if (retainSequenceStartIndex < 0) {
+                    /* removed last point */
+                    retainSequenceStartIndex = j;
+                }
+            }
+        }
+        if (retainSequenceStartIndex == 0) {
+            /* no point removed */
+            continue;
+        }
+        if (retainSequenceStartIndex > 0) {
+            /* removed some point and have to add remaining points */
+            ScribbleStroke newStroke;
+            newStroke.pen = s.pen;
+            newStroke.points = s.points.mid(retainSequenceStartIndex);
+            newStrokes.append(newStroke);
+        }
+
+        /* TODO this can be optimized:
+         * we actually do not need newStrokes as temporary storage */
+
+        layer.items[i] = newStrokes[0];
+        for (int j = 1; j < newStrokes.length(); j ++) {
+            layer.items.insert(i + j, newStrokes[j]);
+        }
+        i += newStrokes.length() - 1;
+        newStrokes.clear();
+
+        somethingHappened = true;
+    }
+
+    if (somethingHappened)
+        /* TODO larger eraser box? */
+        emit strokesChanged(getCurrentPage(), currentLayer, eraserBox);
 }

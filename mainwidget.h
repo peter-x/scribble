@@ -13,40 +13,28 @@ public:
     explicit MainWidget(QWidget *parent = 0);
     void loadFile(const QFile&);
 
-    ScribblePage *getPage(int num);
-    ScribblePage *getCurrentPage();
-    int getCurrentPageNumber();
-    int getCurrentLayer();
-
 signals:
 
 public slots:
     void save();
 
 private slots:
-    void usePen();
-    void useEraser();
-    void previousPage();
-    void nextPage();
-    void sizeThin();
-    void sizeMedium();
-    void sizeThick();
+    void touchEventDataReceived(TouchData &);
+    void mousePressEvent(QMouseEvent *ev) { document->mousePressEvent(ev); }
+    void mouseMoveEvent(QMouseEvent *ev) { document->mouseMoveEvent(ev); }
+    void mouseReleaseEvent(QMouseEvent *ev) { document->mouseReleaseEvent(ev); }
 
 
 protected:
     void keyPressEvent(QKeyEvent *);
 
 private:
-    void updateModeSizeColor();
+    TouchEventListener touchListener;
+    int pressure_of_last_point_;
 
     QDir data_dir;
     ScribbleArea *scribbleArea;
     ScribbleDocument *document;
-
-    int currentPage;
-    int currentLayer;
-    ScribbleArea::ScribbleMode currentMode; /* TODO duplication */
-    int currentSize; /* TODO duplication */
 };
 
 #endif // MAINWIDGET_H

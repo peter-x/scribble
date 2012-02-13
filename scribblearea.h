@@ -11,42 +11,21 @@ class ScribbleArea : public QWidget
 {
     Q_OBJECT
 public:
-    enum ScribbleMode {
-        PEN, ERASER
-    };
 
     explicit ScribbleArea(QWidget *parent);
-    void setModeSizeColor(ScribbleMode mode, float size, const QColor &color);
 
 signals:
 
 public slots:
-    void pageChanged(ScribblePage *page, int layer);
+    void redrawPage(const ScribblePage &page, int layer);
+    void drawStrokePoint(const ScribbleStroke &);
+    void drawCompletedStroke(const ScribbleStroke &);
 
-private slots:
-    void touchEventDataReceived(TouchData &);
+    void updateStrokesInRegion(const ScribblePage &page, int layer, QRectF boundingBox);
+
 
 private:
     void paintEvent(QPaintEvent *);
-    void mousePressEvent(QMouseEvent *);
-    void mouseMoveEvent(QMouseEvent *);
-    void mouseReleaseEvent(QMouseEvent *);
-
-
-    void eraseAt(const QPointF &point);
-
-    ScribblePage *currentPage;
-    int currentLayer;
-
-    QPen currentPen;
-
-    bool sketching;
-    QPolygonF currentStroke;
-
-    ScribbleMode currentMode;
-
-    TouchEventListener touchListener;
-    int pressure_of_last_point_;
 };
 
 #endif // SCRIBBLEAREA_H
