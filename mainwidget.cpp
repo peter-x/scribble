@@ -8,6 +8,7 @@ MainWidget::MainWidget(QWidget *parent) :
 {
     document = new ScribbleDocument(this);
     scribbleArea = new ScribbleArea(this);
+    pressure_of_last_point_ = 0;
 
     connect(document, SIGNAL(pageOrLayerChanged(ScribblePage,int)), scribbleArea, SLOT(redrawPage(ScribblePage,int)));
     connect(document, SIGNAL(strokePointAdded(ScribbleStroke)), scribbleArea, SLOT(drawStrokePoint(ScribbleStroke)));
@@ -113,7 +114,7 @@ void MainWidget::touchEventDataReceived(TouchData &data)
 
     // construct a mouse event
     QEvent::Type type = QEvent::MouseMove;
-    if (pressure_of_last_point_ == 0 && touch_point.pressure > 0)
+    if (pressure_of_last_point_ <= 0 && touch_point.pressure > 0)
         type = QEvent::MouseButtonPress;
     if (pressure_of_last_point_ > 0 && touch_point.pressure <= 0)
         type = QEvent::MouseButtonRelease;

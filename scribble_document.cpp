@@ -125,14 +125,9 @@ bool XournalXMLHandler::fatalError(const QXmlParseException & exception)
 /* --------------------------------------------------------------- */
 
 ScribbleDocument::ScribbleDocument(QObject *parent) :
-    QObject(parent), title(""), sketching(false), currentMode(PEN)
+    QObject(parent), title("")
 {
-  pages.append(ScribblePage());
-  pages[0].layers.append(ScribbleLayer());
-  currentPage = currentLayer = 0;
-
-  currentPen.setColor(QColor(0, 0, 0));
-  currentPen.setWidth(1);
+    initAfterLoad();
 }
 
 bool ScribbleDocument::loadXournalFile(const QFile &file)
@@ -170,11 +165,25 @@ bool ScribbleDocument::loadXournalFile(const QFile &file)
 
     title = handler.getTitle();
     pages = handler.getPages();
-    currentPage = 0;
-    currentLayer = getCurrentPage().layers.length() - 1;
+    initAfterLoad();
 
     emit pageOrLayerChanged(getCurrentPage(), currentLayer);
     return true;
+}
+
+void ScribbleDocument::initAfterLoad()
+{
+    if (pages.length() == 0) {
+        pages.append(ScribblePage());
+        pages[0].layers.append(ScribbleLayer());
+    }
+    currentPage = 0;
+    currentLayer = getCurrentPage().layers.length() - 1;
+
+    sketching = false;
+    currentMode = PEN;
+    currentPen.setColor(QColor(0, 0, 0));
+    currentPen.setWidth(1);
 }
 
 bool ScribbleDocument::setCurrentPage(int index)

@@ -109,6 +109,7 @@ private:
         PEN, ERASER
     };
 
+    void initAfterLoad();
     void eraseAt(const QPointF &point);
 
     QString title;
