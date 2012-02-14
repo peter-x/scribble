@@ -23,9 +23,15 @@ public slots:
 
     void updateStrokesInRegion(const ScribblePage &page, int layer, QRectF boundingBox);
 
+protected:
+    void resizeEvent(QResizeEvent *);
 
 private:
     void paintEvent(QPaintEvent *);
+
+#ifndef BUILD_FOR_ARM
+    QImage buffer;
+#endif
 };
 
 #endif // SCRIBBLEAREA_H

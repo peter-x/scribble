@@ -258,7 +258,6 @@ void ScribbleDocument::mouseReleaseEvent(QMouseEvent *event)
         pages[currentPage].layers[currentLayer].items.append(currentStroke);
         emit strokeCompleted(currentStroke);
         currentStroke.points.clear();
-        qDebug() << "This should not be empty: " << pages[currentPage].layers[currentLayer].items.last().points;
     } else {
         eraseAt(event->pos());
     }

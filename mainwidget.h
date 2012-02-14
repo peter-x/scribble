@@ -20,9 +20,9 @@ public slots:
 
 private slots:
     void touchEventDataReceived(TouchData &);
-    void mousePressEvent(QMouseEvent *ev) { document->mousePressEvent(ev); }
-    void mouseMoveEvent(QMouseEvent *ev) { document->mouseMoveEvent(ev); }
-    void mouseReleaseEvent(QMouseEvent *ev) { document->mouseReleaseEvent(ev); }
+    void mousePressEvent(QMouseEvent *ev);
+    void mouseMoveEvent(QMouseEvent *ev);
+    void mouseReleaseEvent(QMouseEvent *ev);
 
 
 protected:

@@ -88,7 +88,7 @@ signals:
 
 public slots:
     void usePen() { currentMode = PEN; currentPen.setWidth(1); /* TODO end current stroke? */ }
-    void useEraser() { currentMode = PEN; currentPen.setWidth(5); /* TODO end current stroke? */ }
+    void useEraser() { currentMode = ERASER; currentPen.setWidth(10); /* TODO end current stroke? */ }
 
     bool setCurrentPage(int index);
 

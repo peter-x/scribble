@@ -137,6 +137,33 @@ void MainWidget::touchEventDataReceived(TouchData &data)
     pressure_of_last_point_ = touch_point.pressure;
 }
 
+void MainWidget::mousePressEvent(QMouseEvent *ev)
+{
+    TouchData data;
+    data.points[0].x = ev->globalX();
+    data.points[0].y = ev->globalY();
+    data.points[0].pressure = ev->buttons() & Qt::LeftButton;
+    touchEventDataReceived(data);
+}
+
+void MainWidget::mouseMoveEvent(QMouseEvent *ev)
+{
+    TouchData data;
+    data.points[0].x = ev->globalX();
+    data.points[0].y = ev->globalY();
+    data.points[0].pressure = ev->buttons() & Qt::LeftButton;
+    touchEventDataReceived(data);
+}
+
+void MainWidget::mouseReleaseEvent(QMouseEvent *ev)
+{
+    TouchData data;
+    data.points[0].x = ev->globalX();
+    data.points[0].y = ev->globalY();
+    data.points[0].pressure = 0;
+    touchEventDataReceived(data);
+}
+
 void MainWidget::save()
 {
 
