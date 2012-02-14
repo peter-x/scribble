@@ -7,5 +7,5 @@ export QMAKESPEC=/opt/onyx/arm/mkspecs/qws/linux-arm-g++/
 
 mkdir -p build/arm
 cd build/arm
-qmake ../../scribble.pro
+qmake ../../scribble.pro DEFINES+=BUILD_FOR_ARM
 make

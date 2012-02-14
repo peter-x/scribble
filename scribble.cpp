@@ -21,7 +21,7 @@ class MyApplication : public onyx::Application {
 
         mainWidget = new MainWidget();
         //mainWidget->loadFile(QFile("test.xoj"));
-        mainWidget->show(); //FullScreen();
+        mainWidget->showFullScreen();
 
         return 0;
     }
