@@ -181,15 +181,28 @@ void ScribbleDocument::initAfterLoad()
     currentLayer = getCurrentPage().layers.length() - 1;
 
     sketching = false;
+    currentStroke = 0;
     currentMode = PEN;
     currentPen.setColor(QColor(0, 0, 0));
     currentPen.setWidth(1);
+}
+
+void ScribbleDocument::endCurrentStroke()
+{
+    if (!sketching) return;
+
+    if (currentMode == PEN) {
+        emit strokeCompleted(*currentStroke);
+        currentStroke = 0;
+    }
+    sketching = false;
 }
 
 bool ScribbleDocument::setCurrentPage(int index)
 {
     if (index < 0 || index >= pages.length())
         return false;
+    endCurrentStroke();
     currentPage = index;
     currentLayer = qMin(currentLayer, getCurrentPage().layers.length() - 1);
     emit pageOrLayerChanged(getCurrentPage(), currentLayer);
@@ -213,6 +226,7 @@ void ScribbleDocument::previousPage()
 
 void ScribbleDocument::layerUp()
 {
+    endCurrentStroke();
     ScribblePage &p = pages[currentPage];
     if (currentLayer + 1 >= p.layers.length()) {
         p.layers.append(ScribbleLayer());
@@ -224,21 +238,24 @@ void ScribbleDocument::layerUp()
 void ScribbleDocument::layerDown()
 {
     if (currentLayer == 0) return;
+    endCurrentStroke();
     currentLayer -= 1;
     emit pageOrLayerChanged(getCurrentPage(), currentLayer);
 }
 
 void ScribbleDocument::mousePressEvent(QMouseEvent *event)
 {
-    /* TODO currentStroke needs to be part of the page, otherwise
-     * complete repaint event handles will not paint it */
-    /* TODO what to do if not empty? */
-    currentStroke.points.clear();
-    currentStroke.pen = currentPen;
+    if (sketching) /* should not happen */
+        endCurrentStroke();
+
     sketching = true;
     if (currentMode == PEN) {
-        currentStroke.points.append(event->pos());
-        emit strokePointAdded(currentStroke);
+        ScribbleLayer &l = pages[currentPage].layers[currentLayer];
+        l.items.append(ScribbleStroke());
+        currentStroke = &l.items.last();
+        currentStroke->pen = currentPen;
+        currentStroke->points.append(event->pos());
+        emit strokePointAdded(*currentStroke);
     } else {
         eraseAt(event->pos());
     }
@@ -248,8 +265,8 @@ void ScribbleDocument::mouseMoveEvent(QMouseEvent *event)
 {
     if (!sketching) return;
     if (currentMode == PEN) {
-        currentStroke.points.append(event->pos());
-        emit strokePointAdded(currentStroke);
+        currentStroke->points.append(event->pos());
+        emit strokePointAdded(*currentStroke);
     } else {
         eraseAt(event->pos());
     }
@@ -260,18 +277,12 @@ void ScribbleDocument::mouseReleaseEvent(QMouseEvent *event)
     if (!sketching) return;
 
     if (currentMode == PEN) {
-        currentStroke.points.append(event->pos());
-        emit strokePointAdded(currentStroke);
-
-        /* TODO do we need to copy? */
-        pages[currentPage].layers[currentLayer].items.append(currentStroke);
-        emit strokeCompleted(currentStroke);
-        currentStroke.points.clear();
+        currentStroke->points.append(event->pos());
+        emit strokePointAdded(*currentStroke);
     } else {
         eraseAt(event->pos());
     }
-
-    sketching = false;
+    endCurrentStroke();
 }
 
 void ScribbleDocument::eraseAt(const QPointF &point)

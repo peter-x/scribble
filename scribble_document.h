@@ -87,8 +87,8 @@ signals:
     void strokesChanged(const ScribblePage &page, int layer, QRectF boundingBox);
 
 public slots:
-    void usePen() { currentMode = PEN; currentPen.setWidth(1); /* TODO end current stroke? */ }
-    void useEraser() { currentMode = ERASER; currentPen.setWidth(10); /* TODO end current stroke? */ }
+    void usePen() { endCurrentStroke(); currentMode = PEN; currentPen.setWidth(1); }
+    void useEraser() { endCurrentStroke(); currentMode = ERASER; currentPen.setWidth(10); }
 
     bool setCurrentPage(int index);
 
@@ -110,6 +110,7 @@ private:
     };
 
     void initAfterLoad();
+    void endCurrentStroke();
     void eraseAt(const QPointF &point);
 
     QString title;
@@ -120,10 +121,13 @@ private:
 
     QPen currentPen;
 
+    /* if currentMode == PEN && sketching then the last item in the current page
+     * and layer (exists and) is currently extended my mouse movements */
     bool sketching;
-    ScribbleStroke currentStroke;
-
     ScribbleMode currentMode;
+
+    /* shortcut to last item of current layer (if it exists) */
+    ScribbleStroke *currentStroke;
 };
 
 
