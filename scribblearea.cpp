@@ -21,11 +21,12 @@ ScribbleArea::ScribbleArea(QWidget *parent) :
     setBackgroundRole(QPalette::Base);
 
 #ifdef BUILD_FOR_ARM
-    onyx::screen::watcher().addWatcher(this);
+    //onyx::screen::watcher().addWatcher(this);
 #else
     buffer = QImage(size(), QImage::Format_RGB32);
-    QPainter painter(&buffer);
+    painter.begin(&buffer);
     painter.eraseRect(QRect(QPoint(0, 0), size()));
+    painter.end();
 #endif
 }
 
@@ -33,8 +34,9 @@ void ScribbleArea::resizeEvent(QResizeEvent *)
 {
 #ifndef BUILD_FOR_ARM
     buffer = QImage(size(), QImage::Format_RGB32);
-    QPainter painter(&buffer);
+    painter.begin(&buffer);
     painter.eraseRect(QRect(QPoint(0, 0), size()));
+    painter.end();
 #endif
 }
 
@@ -42,49 +44,99 @@ void ScribbleArea::redrawPage(const ScribblePage &page, int layer)
 {
 #ifndef BUILD_FOR_ARM
     buffer = QImage(size(), QImage::Format_RGB32);
-    QPainter painter(&buffer);
+    painter.begin(&buffer);
 
-    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::Antialiasing, false);
     painter.eraseRect(QRect(QPoint(0, 0), size()));
+#else
+
+    /*
+    onyx::screen::instance().updateWidgetRegion(this, QRect(mapToGlobal(QPoint(0, 0)), size()),
+                                                onyx::screen::ScreenProxy::GC, true,
+                                                onyx::screen::ScreenCommand::WAIT_ALL);
+    */
+    /* TODO this does not clear the screen. Does it perhaps update the Qt buffer from the device buffer? */
+    onyx::screen::instance().fillScreen(0xff);
+    onyx::screen::instance().ensureUpdateFinished();
+    onyx::screen::instance().updateWidgetRegion(0, QRect(0, 0, 500, 500));
+    /* TODO If this works, try updateWidget again */
 #endif
-    /* TODO eink: erase screen - perhaps just sync double buffer? */
+
     for (int li = 0; li <= layer; li ++) {
         const ScribbleLayer &l = page.layers[li];
         foreach (const ScribbleStroke &s, l.items) {
-#ifdef BUILD_FOR_ARM
-            /* TODO check if drawing multiple lines works */
-            for (int i = 0; i + 1 < s.points.size(); i ++) {
-                QVector<QPoint> line;
-                line.append(mapToGlobal(s.points[i].toPoint()));
-                line.append(mapToGlobal(s.points[i + 1].toPoint()));
-                onyx::screen::instance().drawLines(line.data(), 2, 0x00, 1);
-            }
-#else
-            painter.setPen(s.pen);
-            painter.drawPolyline(s.points);
-#endif
+            drawStroke(s);
         }
     }
+    /* TODO see if this works */
+    onyx::screen::instance().updateWidgetRegion(0, QRect(0, 0, 500, 500));
 #ifndef BUILD_FOR_ARM
+    painter.end();
     update();
 #endif
 }
 
-void ScribbleArea::drawStrokePoint(const ScribbleStroke &s)
+void ScribbleArea::drawStroke(const ScribbleStroke &s, bool unpaint)
 {
-    int n = s.points.size();
-    if (n < 2) return;
+#ifdef BUILD_FOR_ARM
+    /* TODO check if drawing multiple lines works */
+    for (int i = 0; i + 1 < s.getPoints().size(); i ++) {
+        QVector<QPoint> line;
+        line.append(mapToGlobal(s.getPoints()[i].toPoint()));
+        line.append(mapToGlobal(s.getPoints()[i + 1].toPoint()));
+        int color = unpaint ? 0xff : 0x00;
+        /* TODO size - could be arbitrary integer - it seems that unpainting
+         * does not work with size 1 */
+        onyx::screen::instance().drawLines(line.data(), 2, color, 2);
+    }
+#else
+    QPen pen = s.getPen();
+    pen.setWidth(2); /* simulation */
+    if (unpaint) {
+        /* TODO does not work very well. antialiasing? */
+        pen.setColor(QColor(0xff, 0xff, 0xff));
+    }
+    painter.setPen(pen);
+    painter.drawPolyline(s.getPoints());
+#endif
+}
 
+void ScribbleArea::drawStrokeSegment(const ScribbleStroke &s, int i, bool unpaint)
+{
 #ifdef BUILD_FOR_ARM
     QVector<QPoint> line;
-    line.append(mapToGlobal(s.points[n - 2].toPoint()));
-    line.append(mapToGlobal(s.points[n - 1].toPoint()));
-    onyx::screen::instance().drawLines(line.data(), 2, 0x00, 1);
+    line.append(mapToGlobal(s.getPoints()[i].toPoint()));
+    line.append(mapToGlobal(s.getPoints()[i + 1].toPoint()));
+    int color = unpaint ? 0xff : 0x00;
+    /* TODO size - could be arbitrary integer - it seems that unpainting
+     * does not work with size 1 */
+    onyx::screen::instance().drawLines(line.data(), 2, color, 2);
 #else
-    QPainter painter(&buffer);
+    QPen pen = s.getPen();
+    pen.setWidth(2); /* simulation */
+    if (unpaint) {
+        /* TODO does not work very well. antialiasing? */
+        pen.setColor(QColor(0xff, 0xff, 0xff));
+    }
+    painter.setPen(pen);
+    painter.drawLine(s.getPoints()[i], s.getPoints()[i + 1]);
+#endif
 
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.drawLine(s.points[n - 2], s.points[n - 1]);
+}
+
+void ScribbleArea::drawLastStrokeSegment(const ScribbleStroke &s)
+{
+    int n = s.getPoints().size();
+    if (n < 2) return;
+
+#ifndef BUILD_FOR_ARM
+    painter.begin(&buffer);
+#endif
+
+    drawStrokeSegment(s, n - 2);
+
+#ifndef BUILD_FOR_ARM
+    painter.end();
     update();
 #endif
 }
@@ -94,19 +146,49 @@ void ScribbleArea::drawCompletedStroke(const ScribbleStroke &)
     /* TODO here we could redraw it nicely */
 }
 
-void ScribbleArea::updateStrokesInRegion(const ScribblePage &page, int layer, QRectF boundingBox)
+void ScribbleArea::updateStrokes(const ScribblePage &page, int layer, const QList<ScribbleStroke> &removedStrokes)
 {
-    /* TODO we could optimize it */
-    redrawPage(page, layer);
+    /* this will not work if there is a background or if there are strokes of different colors */
+
+    /* repaint all removed strokes white */
+#ifndef BUILD_FOR_ARM
+    painter.begin(&buffer);
+    painter.setRenderHint(QPainter::Antialiasing, false);
+#endif
+    for (int i = 0; i < removedStrokes.length(); i ++) {
+        drawStroke(removedStrokes[i], true);
+    }
+
+    /* find all strokes intersecting with the removed strokes and repaint them */
+    /* perhaps first use a combined bounding rect for all removed strokes? */
+    for (int i = 0; i <= layer; i ++) {
+        const ScribbleLayer &l = page.layers[i];
+        for (int j = 0; j < l.items.length(); j ++) {
+            const ScribbleStroke &s = l.items[j];
+            for (int k = 0; k < removedStrokes.length(); k ++) {
+                const ScribbleStroke &sr = removedStrokes[k];
+                /* TODO we only need to redraw intersecting line segments */
+                if (s.boundingRectIntersects(sr)) {
+                    for (int p = 0; p < s.getPoints().size() - 1; p ++) {
+                        if (s.segmentIntersects(p, sr))
+                            drawStrokeSegment(s, p);
+                    }
+                }
+            }
+        }
+    }
+#ifndef BUILD_FOR_ARM
+    painter.end();
+    update();
+#endif
+
 }
-
-
 
 void ScribbleArea::paintEvent(QPaintEvent *)
 {
 #ifndef BUILD_FOR_ARM
-    QPainter painter(this);
-    painter.drawImage(QPoint(0,0), buffer);
+    QPainter bufferPainter(this);
+    bufferPainter.drawImage(QPoint(0,0), buffer);
 #endif
 }
 

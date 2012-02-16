@@ -2,6 +2,7 @@
 #define SCRIBBLEAREA_H
 
 #include <QWidget>
+#include <QPainter>
 
 #include "onyx/touch/touch_listener.h"
 
@@ -18,19 +19,24 @@ signals:
 
 public slots:
     void redrawPage(const ScribblePage &page, int layer);
-    void drawStrokePoint(const ScribbleStroke &);
+    void drawLastStrokeSegment(const ScribbleStroke &);
     void drawCompletedStroke(const ScribbleStroke &);
 
-    void updateStrokesInRegion(const ScribblePage &page, int layer, QRectF boundingBox);
+    void updateStrokes(const ScribblePage &page, int layer, const QList<ScribbleStroke> &removedStrokes);
 
 protected:
     void resizeEvent(QResizeEvent *);
 
 private:
     void paintEvent(QPaintEvent *);
+    /* uses painter on x86 */
+    void drawStroke(const ScribbleStroke &s, bool unpaint = false);
+    /* uses painter on x86 */
+    void drawStrokeSegment(const ScribbleStroke &s, int i, bool unpaint = false);
 
 #ifndef BUILD_FOR_ARM
     QImage buffer;
+    QPainter painter;
 #endif
 };
 

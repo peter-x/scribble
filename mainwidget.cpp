@@ -4,16 +4,16 @@
 #include "onyx/screen/screen_update_watcher.h"
 
 MainWidget::MainWidget(QWidget *parent) :
-    QWidget(parent)
+    QWidget(parent, Qt::FramelessWindowHint)
 {
     document = new ScribbleDocument(this);
     scribbleArea = new ScribbleArea(this);
     pressure_of_last_point_ = 0;
 
     connect(document, SIGNAL(pageOrLayerChanged(ScribblePage,int)), scribbleArea, SLOT(redrawPage(ScribblePage,int)));
-    connect(document, SIGNAL(strokePointAdded(ScribbleStroke)), scribbleArea, SLOT(drawStrokePoint(ScribbleStroke)));
+    connect(document, SIGNAL(strokePointAdded(ScribbleStroke)), scribbleArea, SLOT(drawLastStrokeSegment(ScribbleStroke)));
     connect(document, SIGNAL(strokeCompleted(ScribbleStroke)), scribbleArea, SLOT(drawCompletedStroke(ScribbleStroke)));
-    connect(document, SIGNAL(strokesChanged(ScribblePage,int,QRectF)), scribbleArea, SLOT(updateStrokesInRegion(ScribblePage,int,QRectF)));
+    connect(document, SIGNAL(strokesChanged(ScribblePage,int,QList<ScribbleStroke>)), scribbleArea, SLOT(updateStrokes(ScribblePage,int,QList<ScribbleStroke>)));
 
     connect(&touchListener, SIGNAL(touchData(TouchData &)), this, SLOT(touchEventDataReceived(TouchData &)));
 

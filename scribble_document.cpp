@@ -6,6 +6,30 @@
 
 #include "zlib.h"
 
+bool ScribbleStroke::segmentIntersects(int i, const ScribbleStroke &o) const
+{
+    if (i < 0 || i + 1 >= points.size()) return false;
+
+    QPointF p1(points[i]);
+    QPointF p2(points[i + 1]);
+
+    /* TODO
+     * first check if the bounding box of this segment (plus width!) intersects the stroke
+     * then check for each segment of the stroke if they intersect */
+    return true;
+}
+
+void ScribbleStroke::updateBoundingRect()
+{
+    boundingRect = points.boundingRect();
+    qreal a = pen.widthF() / 2.0;
+    a = qMin(a, qreal(0.6));
+    /* bounding rect with zero width or height produces not the intended result */
+    boundingRect.adjust(-a, -a, a, a);
+}
+
+/* ---------------------------------------------------------------- */
+
 XournalXMLHandler::XournalXMLHandler()
 {
     xournal_colors["black"] = QColor("#000000");
@@ -38,9 +62,11 @@ bool XournalXMLHandler::startElement(const QString &namespaceURI, const QString 
         /* TODO tools that are not pen */
         //if (atts.value("tool") != "pen") return false;
 
+        QPen pen;
         ScribbleStroke stroke;
-        stroke.pen.setColor(xournal_colors[atts.value("color")]);
-        stroke.pen.setWidthF(atts.value("width").toFloat());
+        pen.setColor(xournal_colors[atts.value("color")]);
+        pen.setWidthF(atts.value("width").toFloat());
+        stroke.setPen(pen);
         pages.last().layers.last().items.append(stroke);
     } else if (localName == "page") {
         ScribblePage p;
@@ -67,10 +93,11 @@ bool XournalXMLHandler::endElement(const QString &namespaceURI, const QString &l
     Q_UNUSED(qName);
 
     if (localName == "stroke") {
-        QPolygonF &poly = pages.last().layers.last().items.last().points;
+        ScribbleStroke &s = pages.last().layers.last().items.last();
         QStringList chunks = currentStrokeString.split(QRegExp("\\s+"), QString::SkipEmptyParts);
         for (int i = 0; i < chunks.length() - 1; i += 2) {
-            poly.append(QPointF(chunks[i].toFloat(), chunks[i + 1].toFloat()));
+            /* TODO appendPoints? */
+            s.appendPoint(QPointF(chunks[i].toFloat(), chunks[i + 1].toFloat()));
         }
         currentStrokeString.clear();
     }
@@ -121,6 +148,67 @@ bool XournalXMLHandler::fatalError(const QXmlParseException & exception)
     return false;
 }
 
+/* --------------------------------------------------------------- */
+
+bool EraserContext::erase(const ScribbleStroke *stroke, QList<ScribbleStroke> *removedStrokes, QList<ScribbleStroke> *newStrokes,
+                          const QPointF &point, qreal width)
+{
+    this->stroke = stroke;
+    this->removedStrokes = removedStrokes;
+    this->newStrokes = newStrokes;
+
+    previousPointRemoved = false;
+    previousChangeIndex = 0;
+
+    qreal halfWidthSq = width * width / 4.0;
+
+    /* we only check intersections with points, not
+     * line segments */
+    for (int i = 0; i < stroke->getPoints().size(); i ++) {
+        QPointF p = stroke->getPoints()[i] - point;
+        qreal d = p.x() * p.x() + p.y() * p.y();
+        if (d <= halfWidthSq) {
+            /* remove point */
+            if (!previousPointRemoved) {
+                appendFromPreviousChangeIndexUpTo(i, newStrokes);
+            }
+            previousPointRemoved = true;
+        } else {
+            /* retain point */
+            if (previousPointRemoved) {
+                appendFromPreviousChangeIndexUpTo(i, removedStrokes);
+            }
+            previousPointRemoved = false;
+        }
+    }
+    eraseEnded();
+    return previousPointRemoved || previousChangeIndex > 0;
+}
+
+void EraserContext::eraseEnded()
+{
+    int endIndex = stroke->getPoints().size() - 1;
+    if (previousPointRemoved) {
+        appendFromPreviousChangeIndexUpTo(endIndex, removedStrokes);
+    } else {
+        if (previousChangeIndex == 0) {
+            /* nothing happened */
+            return;
+        } else {
+            appendFromPreviousChangeIndexUpTo(endIndex, newStrokes);
+        }
+    }
+}
+
+void EraserContext::appendFromPreviousChangeIndexUpTo(int endIndex, QList<ScribbleStroke> *list)
+{
+    if (endIndex > previousChangeIndex) {
+        list->append(ScribbleStroke(stroke->getPen(),
+                                    stroke->getPoints().mid(previousChangeIndex,
+                                                            endIndex - previousChangeIndex + 1)));
+    }
+    previousChangeIndex = endIndex;
+}
 
 /* --------------------------------------------------------------- */
 
@@ -251,10 +339,9 @@ void ScribbleDocument::mousePressEvent(QMouseEvent *event)
     sketching = true;
     if (currentMode == PEN) {
         ScribbleLayer &l = pages[currentPage].layers[currentLayer];
-        l.items.append(ScribbleStroke());
+        l.items.append(ScribbleStroke(currentPen, QPolygonF()));
         currentStroke = &l.items.last();
-        currentStroke->pen = currentPen;
-        currentStroke->points.append(event->pos());
+        currentStroke->appendPoint(event->posF());
         emit strokePointAdded(*currentStroke);
     } else {
         eraseAt(event->pos());
@@ -265,7 +352,7 @@ void ScribbleDocument::mouseMoveEvent(QMouseEvent *event)
 {
     if (!sketching) return;
     if (currentMode == PEN) {
-        currentStroke->points.append(event->pos());
+        currentStroke->appendPoint(event->posF());
         emit strokePointAdded(*currentStroke);
     } else {
         eraseAt(event->pos());
@@ -277,7 +364,7 @@ void ScribbleDocument::mouseReleaseEvent(QMouseEvent *event)
     if (!sketching) return;
 
     if (currentMode == PEN) {
-        currentStroke->points.append(event->pos());
+        currentStroke->appendPoint(event->posF());
         emit strokePointAdded(*currentStroke);
     } else {
         eraseAt(event->pos());
@@ -289,76 +376,40 @@ void ScribbleDocument::eraseAt(const QPointF &point)
 {
     ScribbleLayer &layer = pages[currentPage].layers[currentLayer];
 
-    float width = currentPen.widthF();
-    float halfWidthSq = width * width / 4.0;
+    qreal width = currentPen.widthF();
     QRectF eraserBox;
     eraserBox.setSize(QSizeF(width, width));
     eraserBox.moveCenter(point);
 
-    bool somethingHappened = false;
-
+    QList<ScribbleStroke> removedStrokes;
     QList<ScribbleStroke> newStrokes;
+
+    EraserContext eraserContext;
+
     for (int i = 0; i < layer.items.length(); i ++) {
         ScribbleStroke &s = layer.items[i];
-        /* bounding rect with zero width or height produces not the intended result */
-        QRectF bound = s.points.boundingRect();
-        bound.adjust(-1, -1, 1, 1);
-        if (!bound.intersects(eraserBox))
+        if (!s.boundingRectIntersects(eraserBox))
             continue;
 
-        /* we only check intersections with points, not
-         * line segments */
-        int retainSequenceStartIndex = 0;
-        for (int j = 0; j < s.points.size(); j ++) {
-            QPointF p = s.points[j] - point;
-            float d = p.x() * p.x() + p.y() * p.y();
-            if (d < halfWidthSq) {
-                /* remove this point */
-                if (retainSequenceStartIndex >= 0) {
-                    /* did not remove last point */
-                    ScribbleStroke newStroke;
-                    newStroke.pen = s.pen;
-                    newStroke.points = s.points.mid(retainSequenceStartIndex,
-                                                    j - retainSequenceStartIndex);
-                    newStrokes.append(newStroke);
-                    retainSequenceStartIndex = -1;
-                } else {
-                    /* also removed last point, do nothing */
-                }
-            } else {
-                /* retain this point */
-                if (retainSequenceStartIndex < 0) {
-                    /* removed last point */
-                    retainSequenceStartIndex = j;
-                }
+        if (!eraserContext.erase(&s, &removedStrokes, &newStrokes, point, width)) {
+            /* nothing removed */
+            continue;
+        }
+
+        if (newStrokes.isEmpty()) {
+            /* stroke removed completely */
+            layer.items.removeAt(i);
+            i -= 1;
+        } else {
+            layer.items[i] = newStrokes[0];
+            for (int j = 1; j < newStrokes.length(); j ++) {
+                layer.items.insert(i + j, newStrokes[j]);
             }
+            i += newStrokes.length() - 1;
+            newStrokes.clear();
         }
-        if (retainSequenceStartIndex == 0) {
-            /* no point removed */
-            continue;
-        }
-        if (retainSequenceStartIndex > 0) {
-            /* removed some point and have to add remaining points */
-            ScribbleStroke newStroke;
-            newStroke.pen = s.pen;
-            newStroke.points = s.points.mid(retainSequenceStartIndex);
-            newStrokes.append(newStroke);
-        }
-
-        /* TODO this can be optimized:
-         * we actually do not need newStrokes as temporary storage */
-
-        layer.items[i] = newStrokes[0];
-        for (int j = 1; j < newStrokes.length(); j ++) {
-            layer.items.insert(i + j, newStrokes[j]);
-        }
-        i += newStrokes.length() - 1;
-        newStrokes.clear();
-
-        somethingHappened = true;
     }
 
-    if (somethingHappened)
-        /* TODO larger eraser box? */
-        emit strokesChanged(getCurrentPage(), currentLayer, eraserBox);
+    if (!removedStrokes.isEmpty())
+        emit strokesChanged(getCurrentPage(), currentLayer, removedStrokes);
 }

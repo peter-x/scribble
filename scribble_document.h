@@ -16,13 +16,25 @@
 class ScribbleStroke
 {
 public:
-    /* TODO cache value (if not done by QPolygonF) */
-    QRectF getBoundingBox() const {
-        return points.boundingRect();
-    }
+    ScribbleStroke() {}
+    ScribbleStroke(const QPen &pen, const QPolygonF &points) : pen(pen), points(points) { updateBoundingRect(); }
+    const QPolygonF &getPoints() const { return points; }
+    const QPen &getPen() const { return pen; }
+    void setPen(const QPen &pen) { this->pen = pen; updateBoundingRect(); }
+
+    bool segmentIntersects(int i, const ScribbleStroke &o) const;
+    bool boundingRectIntersects(const ScribbleStroke &o) const { return boundingRectIntersects(o.boundingRect); };
+    bool boundingRectIntersects(const QRectF &r) const { return boundingRect.intersects(r); }
+    void appendPoint(const QPointF &p) { points.append(p); updateBoundingRect(); }
+    void appendPoints(const QVector<QPointF> &p) { points += p; updateBoundingRect(); }
+
+private:
+    void updateBoundingRect(); /* TODO bounding box of polygon plus half pen width */
 
     QPen pen;
     QPolygonF points;
+
+    QRectF boundingRect;
 };
 
 class ScribbleLayer
@@ -37,6 +49,25 @@ public:
     QList<ScribbleLayer> layers;
     QSizeF size;
     /* TODO background */
+};
+
+class EraserContext
+{
+public:
+    EraserContext() {}
+    bool erase(const ScribbleStroke *stroke, QList<ScribbleStroke> *removedStrokes, QList<ScribbleStroke> *newStrokes,
+               const QPointF &point, qreal width);
+
+private:
+    void appendFromPreviousChangeIndexUpTo(int endIndex, QList<ScribbleStroke> *list);
+    void eraseEnded();
+
+    bool previousPointRemoved;
+    int previousChangeIndex;
+
+    const ScribbleStroke *stroke;
+    QList<ScribbleStroke> *removedStrokes;
+    QList<ScribbleStroke> *newStrokes;
 };
 
 class XournalXMLHandler : public QXmlDefaultHandler {
@@ -84,7 +115,7 @@ signals:
     /* Is emitted after all points have been added. */
     void strokeCompleted(const ScribbleStroke &);
 
-    void strokesChanged(const ScribblePage &page, int layer, QRectF boundingBox);
+    void strokesChanged(const ScribblePage &page, int layer, const QList<ScribbleStroke> &removedStrokes);
 
 public slots:
     void usePen() { endCurrentStroke(); currentMode = PEN; currentPen.setWidth(1); }
