@@ -159,6 +159,8 @@ void ScribbleArea::updateStrokes(const ScribblePage &page, int layer, const QLis
         drawStroke(removedStrokes[i], true);
     }
 
+#if 0
+
     /* find all strokes intersecting with the removed strokes and repaint them */
     /* perhaps first use a combined bounding rect for all removed strokes? */
     for (int i = 0; i <= layer; i ++) {
@@ -177,6 +179,8 @@ void ScribbleArea::updateStrokes(const ScribblePage &page, int layer, const QLis
             }
         }
     }
+#endif
+
 #ifndef BUILD_FOR_ARM
     painter.end();
     update();

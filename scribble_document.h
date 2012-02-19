@@ -23,7 +23,7 @@ public:
     void setPen(const QPen &pen) { this->pen = pen; updateBoundingRect(); }
 
     bool segmentIntersects(int i, const ScribbleStroke &o) const;
-    bool boundingRectIntersects(const ScribbleStroke &o) const { return boundingRectIntersects(o.boundingRect); };
+    bool boundingRectIntersects(const ScribbleStroke &o) const { return boundingRectIntersects(o.boundingRect); }
     bool boundingRectIntersects(const QRectF &r) const { return boundingRect.intersects(r); }
     void appendPoint(const QPointF &p) { points.append(p); updateBoundingRect(); }
     void appendPoints(const QVector<QPointF> &p) { points += p; updateBoundingRect(); }
@@ -46,6 +46,7 @@ public:
 class ScribblePage
 {
 public:
+    ScribblePage() : size(QSizeF(612, 792)) {} /* TODO use reasonable values */
     QList<ScribbleLayer> layers;
     QSizeF size;
     /* TODO background */
@@ -102,6 +103,7 @@ class ScribbleDocument : public QObject
 public:
     explicit ScribbleDocument(QObject *parent = 0);
     bool loadXournalFile(const QFile &file);
+    bool saveXournalFile(const QFile &file);
 
     int getNumPages() const { return pages.length(); }
     const ScribblePage *getPage(int i) const { return (i < 0 || i > pages.length()) ? 0 : &pages[i]; }

@@ -255,9 +255,55 @@ bool ScribbleDocument::loadXournalFile(const QFile &file)
     pages = handler.getPages();
     initAfterLoad();
 
+    /* TODO only save to this file again if we were able
+     * to read all content correctly */
+
     emit pageOrLayerChanged(getCurrentPage(), currentLayer);
     return true;
 }
+
+bool ScribbleDocument::saveXournalFile(const QFile &file)
+{
+    /* TODO do we have to free anything during file name conversion? */
+    gzFile f = gzopen(file.fileName().toLocal8Bit().constData(), "w");
+    if (f == 0) {
+        return false;
+    }
+
+    setlocale(LC_NUMERIC, "C");
+
+    gzprintf(f, "<?xml  version=\"1.0\" standalone=\"no\"?>\n"
+            "<xournal version=\"0.4.5\">\n"
+            "<title>Scribble document - see https://github.com/peter-x/scribble</title>\n");
+    foreach (const ScribblePage &page, pages) {
+        /* TODO float format */
+        gzprintf(f, "<page width=\"%.2f\" height=\"%.2f\">\n",
+                 page.size.width(),
+                 page.size.height());
+        /* TODO background */
+        gzprintf(f, "<background type=\"solid\" color=\"white\" style=\"plain\" />\n");
+        foreach (const ScribbleLayer &layer, page.layers) {
+            gzprintf(f, "<layer>\n");
+            foreach (const ScribbleStroke &stroke, layer.items) {
+                QColor color(stroke.getPen().color());
+                gzprintf(f, "<stroke tool=\"pen\" color=\"black\" width=\"%.2f\">",
+                         /*color ,*/ stroke.getPen().widthF());
+                foreach (const QPointF &point, stroke.getPoints()) {
+                    gzprintf(f, "%.2f %.2f ", point.x(), point.y());
+                }
+                gzprintf(f, "\n</stroke>\n");
+            }
+            gzprintf(f, "</layer>\n");
+        }
+        gzprintf(f, "</page>\n");
+    }
+    gzprintf(f, "</xournal>\n");
+    gzclose(f);
+
+    setlocale(LC_NUMERIC, "");
+
+    return true;
+ }
 
 void ScribbleDocument::initAfterLoad()
 {

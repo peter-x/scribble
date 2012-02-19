@@ -167,5 +167,5 @@ void MainWidget::mouseReleaseEvent(QMouseEvent *ev)
 
 void MainWidget::save()
 {
-
+    document->saveXournalFile(QFile("/tmp/scribble.xoj"));
 }
