@@ -27,6 +27,12 @@ public slots:
 protected:
     void resizeEvent(QResizeEvent *);
 
+private slots:
+#ifndef BUILD_FOR_ARM
+    void updateIfNeeded();
+
+#endif
+
 private:
     void paintEvent(QPaintEvent *);
     /* uses painter on x86 */
@@ -35,8 +41,10 @@ private:
     void drawStrokeSegment(const ScribbleStroke &s, int i, bool unpaint = false);
 
 #ifndef BUILD_FOR_ARM
+    bool needUpdate;
     QImage buffer;
     QPainter painter;
+    QTimer updateTimer;
 #endif
 };
 

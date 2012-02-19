@@ -27,6 +27,11 @@ ScribbleArea::ScribbleArea(QWidget *parent) :
     painter.begin(&buffer);
     painter.eraseRect(QRect(QPoint(0, 0), size()));
     painter.end();
+
+    needUpdate = false;
+    updateTimer.setInterval(80);
+    connect(&updateTimer, SIGNAL(timeout()), SLOT(updateIfNeeded()));
+    updateTimer.start();
 #endif
 }
 
@@ -72,7 +77,8 @@ void ScribbleArea::redrawPage(const ScribblePage &page, int layer)
     onyx::screen::instance().updateWidgetRegion(0, QRect(0, 0, 500, 500));
 #ifndef BUILD_FOR_ARM
     painter.end();
-    update();
+    //update();
+    needUpdate = true;
 #endif
 }
 
@@ -137,7 +143,8 @@ void ScribbleArea::drawLastStrokeSegment(const ScribbleStroke &s)
 
 #ifndef BUILD_FOR_ARM
     painter.end();
-    update();
+    //update();
+    needUpdate = true;
 #endif
 }
 
@@ -183,10 +190,22 @@ void ScribbleArea::updateStrokes(const ScribblePage &page, int layer, const QLis
 
 #ifndef BUILD_FOR_ARM
     painter.end();
-    update();
+    //update();
+    needUpdate = true;
 #endif
 
 }
+
+#ifndef BUILD_FOR_ARM
+void ScribbleArea::updateIfNeeded()
+{
+    if (needUpdate) {
+        needUpdate = false;
+        update();
+    }
+}
+
+#endif
 
 void ScribbleArea::paintEvent(QPaintEvent *)
 {
