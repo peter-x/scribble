@@ -3,6 +3,9 @@
 #include "onyx/screen/screen_proxy.h"
 #include "onyx/screen/screen_update_watcher.h"
 
+#include "onyx/ui/toolbar.h"
+#include "onyx/ui/status_bar.h"
+
 MainWidget::MainWidget(QWidget *parent) :
     QWidget(parent, Qt::FramelessWindowHint), currentFile("")
 {
@@ -10,14 +13,7 @@ MainWidget::MainWidget(QWidget *parent) :
     scribbleArea = new ScribbleArea(this);
     pressure_of_last_point_ = 0;
 
-    connect(document, SIGNAL(pageOrLayerChanged(ScribblePage,int)), scribbleArea, SLOT(redrawPage(ScribblePage,int)));
-    connect(document, SIGNAL(strokePointAdded(ScribbleStroke)), scribbleArea, SLOT(drawLastStrokeSegment(ScribbleStroke)));
-    connect(document, SIGNAL(strokeCompleted(ScribbleStroke)), scribbleArea, SLOT(drawCompletedStroke(ScribbleStroke)));
-    connect(document, SIGNAL(strokesChanged(ScribblePage,int,QList<ScribbleStroke>)), scribbleArea, SLOT(updateStrokes(ScribblePage,int,QList<ScribbleStroke>)));
-
-    connect(&touchListener, SIGNAL(touchData(TouchData &)), this, SLOT(touchEventDataReceived(TouchData &)));
-
-    QToolBar *toolbar = new QToolBar(this);
+    ui::OnyxToolBar *toolbar = new ui::OnyxToolBar(this);
     /* TODO use action groups */
 
     QAction *left = new QAction(QIcon(":/images/left_arrow.png"),
@@ -67,13 +63,29 @@ MainWidget::MainWidget(QWidget *parent) :
      * some settings
      */
 
+    statusBar = new ui::StatusBar(this, ui::MENU | ui::PROGRESS |
+                                                        ui::BATTERY | ui::SCREEN_REFRESH |
+                                                        ui::CLOCK);
+
     QVBoxLayout *layout = new QVBoxLayout;
 
     layout->addWidget(toolbar);
     layout->addWidget(scribbleArea);
+    layout->addWidget(statusBar);
 
     setLayout(layout);
     onyx::screen::watcher().addWatcher(this);
+
+    /* TODO possible bug reason: widget paints itself before being visible */
+    connect(document, SIGNAL(pageOrLayerChanged(ScribblePage,int)), scribbleArea, SLOT(redrawPage(ScribblePage,int)));
+    connect(document, SIGNAL(strokePointAdded(ScribbleStroke)), scribbleArea, SLOT(drawLastStrokeSegment(ScribbleStroke)));
+    connect(document, SIGNAL(strokeCompleted(ScribbleStroke)), scribbleArea, SLOT(drawCompletedStroke(ScribbleStroke)));
+    connect(document, SIGNAL(strokesChanged(ScribblePage,int,QList<ScribbleStroke>)), scribbleArea, SLOT(updateStrokes(ScribblePage,int,QList<ScribbleStroke>)));
+
+    connect(document, SIGNAL(pageOrLayerNumberChanged(int,int,int,int)), SLOT(updateProgressBar(int,int,int,int)));
+    connect(statusBar, SIGNAL(progressClicked(int,int)), SLOT(setPage(int,int)));
+
+    connect(&touchListener, SIGNAL(touchData(TouchData &)), this, SLOT(touchEventDataReceived(TouchData &)));
 
     QTimer *save_timer = new QTimer(this);
     connect(save_timer, SIGNAL(timeout()), SLOT(save()));
@@ -99,6 +111,7 @@ void MainWidget::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
     case Qt::Key_Escape:
+        save();
         qApp->exit();
     default:
         QWidget::keyPressEvent(event);
@@ -171,6 +184,16 @@ void MainWidget::mouseReleaseEvent(QMouseEvent *ev)
     data.points[0].y = ev->globalY();
     data.points[0].pressure = 0;
     touchEventDataReceived(data);
+}
+
+void MainWidget::updateProgressBar(int currentPage, int maxPages, int currentLayer, int maxLayers)
+{
+    statusBar->setProgress(currentPage + 1, maxPages);
+}
+
+void MainWidget::setPage(int percentage, int page)
+{
+    document->setCurrentPage(page - 1);
 }
 
 void MainWidget::save()

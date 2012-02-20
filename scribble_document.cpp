@@ -258,6 +258,7 @@ bool ScribbleDocument::loadXournalFile(const QFile &file)
     /* TODO only save to this file again if we were able
      * to read all content correctly */
 
+    emit pageOrLayerNumberChanged(currentPage, pages.length(), currentLayer, getCurrentPage().layers.length());
     emit pageOrLayerChanged(getCurrentPage(), currentLayer);
     return true;
 }
@@ -319,6 +320,9 @@ void ScribbleDocument::initAfterLoad()
     currentMode = PEN;
     currentPen.setColor(QColor(0, 0, 0));
     currentPen.setWidth(1);
+
+    emit pageOrLayerNumberChanged(currentPage, pages.length(), currentLayer, getCurrentPage().layers.length());
+    emit pageOrLayerChanged(getCurrentPage(), currentLayer);
 }
 
 void ScribbleDocument::endCurrentStroke()
@@ -339,6 +343,7 @@ bool ScribbleDocument::setCurrentPage(int index)
     endCurrentStroke();
     currentPage = index;
     currentLayer = qMin(currentLayer, getCurrentPage().layers.length() - 1);
+    emit pageOrLayerNumberChanged(currentPage, pages.length(), currentLayer, getCurrentPage().layers.length());
     emit pageOrLayerChanged(getCurrentPage(), currentLayer);
     return true;
 }
@@ -366,6 +371,7 @@ void ScribbleDocument::layerUp()
         p.layers.append(ScribbleLayer());
     }
     currentLayer += 1;
+    emit pageOrLayerNumberChanged(currentPage, pages.length(), currentLayer, getCurrentPage().layers.length());
     emit pageOrLayerChanged(getCurrentPage(), currentLayer);
 }
 
@@ -374,6 +380,7 @@ void ScribbleDocument::layerDown()
     if (currentLayer == 0) return;
     endCurrentStroke();
     currentLayer -= 1;
+    emit pageOrLayerNumberChanged(currentPage, pages.length(), currentLayer, getCurrentPage().layers.length());
     emit pageOrLayerChanged(getCurrentPage(), currentLayer);
 }
 

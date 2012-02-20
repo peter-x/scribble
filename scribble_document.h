@@ -110,6 +110,7 @@ public:
     const ScribblePage &getCurrentPage() const { return pages[currentPage]; }
 
 signals:
+    void pageOrLayerNumberChanged(int currentPage, int maxPages, int currentLayer, int maxLayers);
     /* only if changed completely */
     void pageOrLayerChanged(const ScribblePage &page, int currentLayer);
     /* Only the last point was added. The stroke is the newest one. */

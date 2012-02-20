@@ -3,6 +3,8 @@
 
 #include <QtGui>
 
+#include "onyx/ui/status_bar.h"
+
 #include "scribblearea.h"
 #include "scribble_document.h"
 
@@ -25,6 +27,9 @@ private slots:
     void mouseMoveEvent(QMouseEvent *ev);
     void mouseReleaseEvent(QMouseEvent *ev);
 
+    void updateProgressBar(int currentPage, int maxPages, int currentLayer, int maxLayers);
+    void setPage(int percentage, int page);
+
 
 protected:
     void keyPressEvent(QKeyEvent *);
@@ -36,6 +41,8 @@ private:
     QFile currentFile;
     ScribbleArea *scribbleArea;
     ScribbleDocument *document;
+
+    ui::StatusBar *statusBar;
 };
 
 #endif // MAINWIDGET_H
