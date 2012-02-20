@@ -20,7 +20,14 @@ class MyApplication : public onyx::Application {
         sys::SysStatus::instance().setSystemBusy(false);
 
         mainWidget = new MainWidget();
-        //mainWidget->loadFile(QFile("test.xoj"));
+        QFile file;
+        if (QDir("/media/flash").exists()) {
+            file.setFileName("/media/flash/scribble.xoj");
+        } else {
+            file.setFileName(QDir::homePath() + "/scribble.xoj");
+        }
+        mainWidget->loadFile(file);
+        mainWidget->saveFile(file);
         mainWidget->showFullScreen();
 
         return 0;

@@ -4,7 +4,7 @@
 #include "onyx/screen/screen_update_watcher.h"
 
 MainWidget::MainWidget(QWidget *parent) :
-    QWidget(parent, Qt::FramelessWindowHint)
+    QWidget(parent, Qt::FramelessWindowHint), currentFile("")
 {
     document = new ScribbleDocument(this);
     scribbleArea = new ScribbleArea(this);
@@ -83,8 +83,16 @@ MainWidget::MainWidget(QWidget *parent) :
 
 void MainWidget::loadFile(const QFile &file)
 {
-    /* TODO check return value */
-    document->loadXournalFile(file);
+    /* TODO error message */
+    if (document->loadXournalFile(file)) {
+        currentFile.setFileName(file.fileName());
+    }
+}
+
+void MainWidget::saveFile(const QFile &file)
+{
+    document->saveXournalFile(file);
+    currentFile.setFileName(file.fileName());
 }
 
 void MainWidget::keyPressEvent(QKeyEvent *event)
@@ -167,5 +175,6 @@ void MainWidget::mouseReleaseEvent(QMouseEvent *ev)
 
 void MainWidget::save()
 {
-    document->saveXournalFile(QFile("/tmp/scribble.xoj"));
+    if (currentFile.fileName() != "")
+        document->saveXournalFile(currentFile);
 }

@@ -12,6 +12,7 @@ class MainWidget : public QWidget
 public:
     explicit MainWidget(QWidget *parent = 0);
     void loadFile(const QFile&);
+    void saveFile(const QFile&);
 
 signals:
 
@@ -32,7 +33,7 @@ private:
     TouchEventListener touchListener;
     int pressure_of_last_point_;
 
-    QDir data_dir;
+    QFile currentFile;
     ScribbleArea *scribbleArea;
     ScribbleDocument *document;
 };
