@@ -7,127 +7,156 @@
 #include "onyx/screen/screen_proxy.h"
 #include "onyx/screen/screen_update_watcher.h"
 
-static const QString SCRIBBLE_PATH = "scribble_doc";
-
-ScribbleArea::ScribbleArea(QWidget *parent) :
-    QWidget(parent, Qt::FramelessWindowHint)
+void ScribbleGraphicsContext::drawPage(const ScribblePage &page, int maxLayer)
 {
-    setMinimumSize(100, 100);
-#ifdef BUILD_FOR_ARM
-    setAutoFillBackground(false); /* TODO correct? */
-#else
-    setAutoFillBackground(true);
-#endif
-    setBackgroundRole(QPalette::Base);
-
-#ifdef BUILD_FOR_ARM
-    //onyx::screen::watcher().addWatcher(this);
-#else
-    buffer = QImage(size(), QImage::Format_RGB32);
-    painter.begin(&buffer);
-    painter.eraseRect(QRect(QPoint(0, 0), size()));
-    painter.end();
-
-    needUpdate = false;
-    updateTimer.setInterval(80);
-    connect(&updateTimer, SIGNAL(timeout()), SLOT(updateIfNeeded()));
-    updateTimer.start();
-#endif
-}
-
-void ScribbleArea::resizeEvent(QResizeEvent *)
-{
-#ifndef BUILD_FOR_ARM
-    buffer = QImage(size(), QImage::Format_RGB32);
-    painter.begin(&buffer);
-    painter.eraseRect(QRect(QPoint(0, 0), size()));
-    painter.end();
-#endif
-}
-
-void ScribbleArea::redrawPage(const ScribblePage &page, int layer)
-{
-#ifndef BUILD_FOR_ARM
-    buffer = QImage(size(), QImage::Format_RGB32);
-    painter.begin(&buffer);
-
-    painter.setRenderHint(QPainter::Antialiasing, false);
-    painter.eraseRect(QRect(QPoint(0, 0), size()));
-#else
-
-    /*
-    onyx::screen::instance().updateWidgetRegion(this, QRect(mapToGlobal(QPoint(0, 0)), size()),
-                                                onyx::screen::ScreenProxy::GC, true,
-                                                onyx::screen::ScreenCommand::WAIT_ALL);
-    */
-    /* TODO this does not clear the screen. Does it perhaps update the Qt buffer from the device buffer? */
-    onyx::screen::instance().fillScreen(0xff);
-    onyx::screen::instance().ensureUpdateFinished();
-    onyx::screen::instance().updateWidgetRegion(0, QRect(0, 0, 500, 500));
-    /* TODO If this works, try updateWidget again */
-#endif
-
-    for (int li = 0; li <= layer; li ++) {
+    for (int li = 0; li <= maxLayer; li ++) {
         const ScribbleLayer &l = page.layers[li];
         foreach (const ScribbleStroke &s, l.items) {
             drawStroke(s);
         }
     }
-    /* TODO see if this works */
-    onyx::screen::instance().updateWidgetRegion(0, QRect(0, 0, 500, 500));
-#ifndef BUILD_FOR_ARM
-    painter.end();
-    //update();
-    needUpdate = true;
-#endif
 }
 
-void ScribbleArea::drawStroke(const ScribbleStroke &s, bool unpaint)
+void ScribbleGraphicsContext::drawStroke(const ScribbleStroke &stroke)
 {
-#ifdef BUILD_FOR_ARM
-    /* TODO check if drawing multiple lines works */
-    for (int i = 0; i + 1 < s.getPoints().size(); i ++) {
-        QVector<QPoint> line;
-        line.append(mapToGlobal(s.getPoints()[i].toPoint()));
-        line.append(mapToGlobal(s.getPoints()[i + 1].toPoint()));
-        int color = unpaint ? 0xff : 0x00;
-        /* TODO size - could be arbitrary integer - it seems that unpainting
-         * does not work with size 1 */
-        onyx::screen::instance().drawLines(line.data(), 2, color, 2);
+    QPen pen = stroke.getPen();
+    unsigned char color = undraw ? 0xff : pen.color().lightness();
+
+    const QPolygonF &points = stroke.getPoints();
+    if (painter) {
+        for (int i = 0; i + 1 < points.size(); i ++) {
+            drawLinePainter(points[i].toPoint(), points[i + 1].toPoint(), color, qCeil(pen.widthF()));
+        }
+    } else {
+        /* TODO check if drawing multiple lines works */
+        for (int i = 0; i + 1 < points.size(); i ++) {
+            drawLineDirect(points[i].toPoint(), points[i + 1].toPoint(), color, qCeil(pen.widthF()));
+        }
     }
-#else
-    QPen pen = s.getPen();
-    pen.setWidth(2); /* simulation */
-    if (unpaint) {
-        /* TODO does not work very well. antialiasing? */
-        pen.setColor(QColor(0xff, 0xff, 0xff));
-    }
-    painter.setPen(pen);
-    painter.drawPolyline(s.getPoints());
-#endif
 }
 
-void ScribbleArea::drawStrokeSegment(const ScribbleStroke &s, int i, bool unpaint)
+void ScribbleGraphicsContext::drawStrokeSegment(const ScribbleStroke &stroke, int i)
 {
-#ifdef BUILD_FOR_ARM
+    QPen pen = stroke.getPen();
+    unsigned char color = undraw ? 0xff : pen.color().lightness();
+    const QPolygonF &points = stroke.getPoints();
+    if (painter) {
+        drawLinePainter(points[i].toPoint(), points[i + 1].toPoint(), color, qCeil(pen.widthF()));
+    } else {
+        drawLineDirect(points[i].toPoint(), points[i + 1].toPoint(), color, qCeil(pen.widthF()));
+    }
+}
+
+void ScribbleGraphicsContext::drawLinePainter(const QPoint &p1, const QPoint &p2, unsigned char color, int width)
+{
+    QBrush brush(QColor(color, color, color), Qt::SolidPattern);
+
+    int rad = width / 2;
+    int px1 = p1.x() - rad;
+    int py1 = p1.y() - rad;
+    int px2 = p2.x() - rad;
+    int py2 = p2.y() - rad;
+
+    painter->setRenderHint(QPainter::Antialiasing);
+    painter->fillRect(px2, py2, width, width, brush);
+
+    bool is_steep = qAbs(py2 - py1) > qAbs(px2 - px1);
+    if (is_steep) {
+        std::swap(px1, py1);
+        std::swap(px2, py2);
+    }
+
+    // setup line draw
+    int deltax   = qAbs(px2 - px1);
+    int deltaerr = qAbs(py2 - py1);
+    int error = 0;
+    int x = px1;
+    int y = py1;
+
+    // setup step increment
+    int xstep = (px1 < px2) ? 1 : -1;
+    int ystep = (py1 < py2) ? 1 : -1;
+
+    if (is_steep) {
+        for (int numpix = 0; numpix < deltax; numpix++) {
+            x += xstep;
+            error += deltaerr;
+
+            if (2 * error > deltax) {
+                y += ystep;
+                error -= deltax;
+            }
+
+            painter->fillRect(y, x, width, width, brush);
+        }
+    } else {
+        for (int numpix = 0; numpix < deltax; numpix++) {
+            x += xstep;
+            error += deltaerr;
+
+            if (2 * error > deltax) {
+                y += ystep;
+                error -= deltax;
+            }
+
+            painter->fillRect(x, y, width, width, brush);
+        }
+    }
+
+}
+
+void ScribbleGraphicsContext::drawLineDirect(const QPoint &p1, const QPoint &p2, unsigned char color, int width)
+{
     QVector<QPoint> line;
-    line.append(mapToGlobal(s.getPoints()[i].toPoint()));
-    line.append(mapToGlobal(s.getPoints()[i + 1].toPoint()));
-    int color = unpaint ? 0xff : 0x00;
-    /* TODO size - could be arbitrary integer - it seems that unpainting
-     * does not work with size 1 */
-    onyx::screen::instance().drawLines(line.data(), 2, color, 2);
-#else
-    QPen pen = s.getPen();
-    pen.setWidth(2); /* simulation */
-    if (unpaint) {
-        /* TODO does not work very well. antialiasing? */
-        pen.setColor(QColor(0xff, 0xff, 0xff));
-    }
-    painter.setPen(pen);
-    painter.drawLine(s.getPoints()[i], s.getPoints()[i + 1]);
-#endif
+    line.append(widget->mapToGlobal(p1));
+    line.append(widget->mapToGlobal(p2));
+    /* TODO try if intermediate colors work */
+    color = color >= 0x7f ? 0xff : 0x00;
+    /* TODO width smller than two does not work */
+    if (width < 2) width = 2;
+    onyx::screen::instance().drawLines(line.data(), 2, color, width);
+}
 
+ScribbleArea::ScribbleArea(QWidget *parent, const ScribbleDocument *document) :
+    QWidget(parent, Qt::FramelessWindowHint), document(document)
+{
+    setMinimumSize(100, 100);
+    setAutoFillBackground(false);
+    setBackgroundRole(QPalette::Base);
+
+#ifdef BUILD_FOR_ARM
+    onyx::screen::watcher().addWatcher(this);
+#endif
+    buffer = QImage(size(), QImage::Format_Mono); /* TODO this is BW and not monochrome */
+    QPainter painter(&buffer);
+    painter.eraseRect(rect());
+
+    regionToUpdate = QRegion(rect());
+    updateTimer.setInterval(80);
+    connect(&updateTimer, SIGNAL(timeout()), SLOT(updateIfNeeded()));
+    updateTimer.start();
+
+    connect(document, SIGNAL(pageOrLayerChanged(ScribblePage,int)), SLOT(redrawPage(ScribblePage,int)));
+    connect(document, SIGNAL(strokePointAdded(ScribbleStroke)), SLOT(drawLastStrokeSegment(ScribbleStroke)));
+    connect(document, SIGNAL(strokeCompleted(ScribbleStroke)), SLOT(drawCompletedStroke(ScribbleStroke)));
+    connect(document, SIGNAL(strokesChanged(ScribblePage,int,QList<ScribbleStroke>)), SLOT(updateStrokes(ScribblePage,int,QList<ScribbleStroke>)));
+}
+
+void ScribbleArea::resizeEvent(QResizeEvent *)
+{
+    redrawPage(document->getCurrentPage(), document->getCurrentLayer());
+}
+
+void ScribbleArea::redrawPage(const ScribblePage &page, int layer)
+{
+    buffer = QImage(size(), QImage::Format_Mono);
+    QPainter painter(&buffer);
+    painter.eraseRect(rect());
+
+    ScribbleGraphicsContext ctx(&painter, false);
+    ctx.drawPage(page, layer);
+
+    regionToUpdate = rect();
 }
 
 void ScribbleArea::drawLastStrokeSegment(const ScribbleStroke &s)
@@ -135,16 +164,25 @@ void ScribbleArea::drawLastStrokeSegment(const ScribbleStroke &s)
     int n = s.getPoints().size();
     if (n < 2) return;
 
-#ifndef BUILD_FOR_ARM
-    painter.begin(&buffer);
+#if defined(BUILD_FOR_ARM)
+    ScribbleGraphicsContext ctx(this, false);
+#else
+    QPainter painter(&buffer);
+    ScribbleGraphicsContext ctx(&painter, false);
 #endif
 
-    drawStrokeSegment(s, n - 2);
+    ctx.drawStrokeSegment(s, n - 2);
 
-#ifndef BUILD_FOR_ARM
-    painter.end();
-    //update();
-    needUpdate = true;
+#if !defined(BUILD_FOR_ARM)
+    qreal width = s.getPen().widthF();
+    QPointF p1 = s.getPoints()[n - 2];
+    QPointF p2 = s.getPoints()[n - 1];
+    QRect br(QPoint(qFloor(qMin(p1.x(), p2.x()) - width / 2.0) - 1,
+                    qFloor(qMin(p1.y(), p2.y()) - width / 2.0) - 1),
+             QSize(qCeil(qAbs(p1.x() - p2.x()) + width) + 2,
+                   qCeil(qAbs(p1.y() - p2.y()) + width) + 2));
+
+    regionToUpdate += br;
 #endif
 }
 
@@ -158,12 +196,18 @@ void ScribbleArea::updateStrokes(const ScribblePage &page, int layer, const QLis
     /* this will not work if there is a background or if there are strokes of different colors */
 
     /* repaint all removed strokes white */
-#ifndef BUILD_FOR_ARM
-    painter.begin(&buffer);
-    painter.setRenderHint(QPainter::Antialiasing, false);
+#if defined(BUILD_FOR_ARM)
+    ScribbleGraphicsContext ctx(this, true);
+#else
+    QPainter painter(&buffer);
+    ScribbleGraphicsContext ctx(&painter, true);
 #endif
-    for (int i = 0; i < removedStrokes.length(); i ++) {
-        drawStroke(removedStrokes[i], true);
+    foreach (const ScribbleStroke &s, removedStrokes) {
+        ctx.drawStroke(s);
+#if !defined(BUILD_FOR_ARM)
+        /* TODO round in the right direction */
+        regionToUpdate += s.getBoundingRect().toRect();
+#endif
     }
 
 #if 0
@@ -187,31 +231,24 @@ void ScribbleArea::updateStrokes(const ScribblePage &page, int layer, const QLis
         }
     }
 #endif
-
-#ifndef BUILD_FOR_ARM
-    painter.end();
-    //update();
-    needUpdate = true;
-#endif
-
 }
 
-#ifndef BUILD_FOR_ARM
 void ScribbleArea::updateIfNeeded()
 {
-    if (needUpdate) {
-        needUpdate = false;
-        update();
+    if (!regionToUpdate.isEmpty()) {
+        update(regionToUpdate);
     }
 }
 
-#endif
-
-void ScribbleArea::paintEvent(QPaintEvent *)
+void ScribbleArea::paintEvent(QPaintEvent *ev)
 {
-#ifndef BUILD_FOR_ARM
     QPainter bufferPainter(this);
-    bufferPainter.drawImage(QPoint(0,0), buffer);
+    bufferPainter.drawImage(QPoint(), buffer);
+    regionToUpdate = QRect();
+#if defined(BUILD_FOR_ARM)
+    /* TODO we could safely request to update the whole rect */
+    onyx::screen::watcher().enqueue(this, ev->rect(), onyx::screen::ScreenProxy::DW);
+    //onyx::screen::instance().updateWidgetRegion(this, ev->rect(), onyx::screen::ScreenProxy::DW, false);
 #endif
 }
 

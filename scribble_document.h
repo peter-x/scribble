@@ -22,6 +22,7 @@ public:
     const QPen &getPen() const { return pen; }
     void setPen(const QPen &pen) { this->pen = pen; updateBoundingRect(); }
 
+    const QRectF &getBoundingRect() const { return boundingRect; }
     bool segmentIntersects(int i, const ScribbleStroke &o) const;
     bool boundingRectIntersects(const ScribbleStroke &o) const { return boundingRectIntersects(o.boundingRect); }
     bool boundingRectIntersects(const QRectF &r) const { return boundingRect.intersects(r); }
@@ -29,7 +30,7 @@ public:
     void appendPoints(const QVector<QPointF> &p) { points += p; updateBoundingRect(); }
 
 private:
-    void updateBoundingRect(); /* TODO bounding box of polygon plus half pen width */
+    void updateBoundingRect();
 
     QPen pen;
     QPolygonF points;
@@ -106,8 +107,8 @@ public:
     bool saveXournalFile(const QFile &file);
 
     int getNumPages() const { return pages.length(); }
-    const ScribblePage *getPage(int i) const { return (i < 0 || i > pages.length()) ? 0 : &pages[i]; }
     const ScribblePage &getCurrentPage() const { return pages[currentPage]; }
+    int getCurrentLayer() const { return currentLayer; }
 
 signals:
     void pageOrLayerNumberChanged(int currentPage, int maxPages, int currentLayer, int maxLayers);
@@ -121,7 +122,7 @@ signals:
     void strokesChanged(const ScribblePage &page, int layer, const QList<ScribbleStroke> &removedStrokes);
 
 public slots:
-    void usePen() { endCurrentStroke(); currentMode = PEN; currentPen.setWidth(1); }
+    void usePen() { endCurrentStroke(); currentMode = PEN; currentPen.setWidth(2); }
     void useEraser() { endCurrentStroke(); currentMode = ERASER; currentPen.setWidth(10); }
 
     bool setCurrentPage(int index);

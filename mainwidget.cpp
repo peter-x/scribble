@@ -10,7 +10,7 @@ MainWidget::MainWidget(QWidget *parent) :
     QWidget(parent, Qt::FramelessWindowHint), currentFile("")
 {
     document = new ScribbleDocument(this);
-    scribbleArea = new ScribbleArea(this);
+    scribbleArea = new ScribbleArea(this, document);
     pressure_of_last_point_ = 0;
 
     ui::OnyxToolBar *toolbar = new ui::OnyxToolBar(this);
@@ -75,12 +75,6 @@ MainWidget::MainWidget(QWidget *parent) :
 
     setLayout(layout);
     onyx::screen::watcher().addWatcher(this);
-
-    /* TODO possible bug reason: widget paints itself before being visible */
-    connect(document, SIGNAL(pageOrLayerChanged(ScribblePage,int)), scribbleArea, SLOT(redrawPage(ScribblePage,int)));
-    connect(document, SIGNAL(strokePointAdded(ScribbleStroke)), scribbleArea, SLOT(drawLastStrokeSegment(ScribbleStroke)));
-    connect(document, SIGNAL(strokeCompleted(ScribbleStroke)), scribbleArea, SLOT(drawCompletedStroke(ScribbleStroke)));
-    connect(document, SIGNAL(strokesChanged(ScribblePage,int,QList<ScribbleStroke>)), scribbleArea, SLOT(updateStrokes(ScribblePage,int,QList<ScribbleStroke>)));
 
     connect(document, SIGNAL(pageOrLayerNumberChanged(int,int,int,int)), SLOT(updateProgressBar(int,int,int,int)));
     connect(statusBar, SIGNAL(progressClicked(int,int)), SLOT(setPage(int,int)));

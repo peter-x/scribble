@@ -8,12 +8,33 @@
 
 #include "scribble_document.h"
 
+class ScribbleGraphicsContext
+{
+public:
+    /* draw to QWidget */
+    ScribbleGraphicsContext(QPainter *painter, bool undraw) : widget(0), painter(painter), undraw(undraw) {}
+    /* directly draw to screen */
+    ScribbleGraphicsContext(QWidget *widget, bool undraw) : widget(widget), painter(0), undraw(undraw) {}
+
+    void drawPage(const ScribblePage &page, int maxLayer);
+    void drawStroke(const ScribbleStroke &stroke);
+    void drawStrokeSegment(const ScribbleStroke &stroke, int i);
+
+private:
+    void drawLinePainter(const QPoint &p1, const QPoint &p2, unsigned char color, int width);
+    void drawLineDirect(const QPoint &p1, const QPoint &p2, unsigned char color, int width);
+
+    QWidget *widget;
+    QPainter *painter;
+    bool undraw;
+};
+
 class ScribbleArea : public QWidget
 {
     Q_OBJECT
 public:
 
-    explicit ScribbleArea(QWidget *parent);
+    explicit ScribbleArea(QWidget *parent, const ScribbleDocument *document);
 
 signals:
 
@@ -28,10 +49,7 @@ protected:
     void resizeEvent(QResizeEvent *);
 
 private slots:
-#ifndef BUILD_FOR_ARM
     void updateIfNeeded();
-
-#endif
 
 private:
     void paintEvent(QPaintEvent *);
@@ -40,12 +58,12 @@ private:
     /* uses painter on x86 */
     void drawStrokeSegment(const ScribbleStroke &s, int i, bool unpaint = false);
 
-#ifndef BUILD_FOR_ARM
-    bool needUpdate;
+    const ScribbleDocument *document;
+
     QImage buffer;
-    QPainter painter;
+
+    QRegion regionToUpdate;
     QTimer updateTimer;
-#endif
 };
 
 #endif // SCRIBBLEAREA_H
