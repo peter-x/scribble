@@ -61,6 +61,7 @@ bool XournalXMLHandler::startElement(const QString &namespaceURI, const QString 
     if (localName == "stroke") {
         /* TODO tools that are not pen */
         //if (atts.value("tool") != "pen") return false;
+        /* TODO error for tools that are not pen */
 
         QPen pen;
         ScribbleStroke stroke;
@@ -73,7 +74,13 @@ bool XournalXMLHandler::startElement(const QString &namespaceURI, const QString 
         p.size = QSizeF(atts.value("width").toFloat(), atts.value("height").toFloat());
         pages.append(p);
     } else if (localName == "background") {
-        /* TODO */
+        ScribblePage &p(pages.last());
+        p.background.type = getAttribute(atts, "type");
+        p.background.color = getAttribute(atts, "color");
+        p.background.style = getAttribute(atts, "style");
+        p.background.domain = getAttribute(atts, "domain");
+        p.background.filename = getAttribute(atts, "filename");
+        p.background.pageno = getAttribute(atts, "pageno");
     } else if (localName == "layer") {
         ScribbleLayer l;
         pages.last().layers.append(l);
@@ -277,22 +284,36 @@ bool ScribbleDocument::saveXournalFile(const QFile &file)
             "<xournal version=\"0.4.5\">\n"
             "<title>Scribble document - see https://github.com/peter-x/scribble</title>\n");
     foreach (const ScribblePage &page, pages) {
-        /* TODO float format */
         gzprintf(f, "<page width=\"%.2f\" height=\"%.2f\">\n",
                  page.size.width(),
                  page.size.height());
-        /* TODO background */
-        gzprintf(f, "<background type=\"solid\" color=\"white\" style=\"plain\" />\n");
+
+        gzprintf(f, "<background type=\"%s\" ", XournalXMLHandler::encodeString(page.background.type).toUtf8().constData());
+        if (!page.background.color.isNull())
+            gzprintf(f, "color=\"%s\" ", XournalXMLHandler::encodeString(page.background.color).toUtf8().constData());
+        if (!page.background.style.isNull())
+            gzprintf(f, "style=\"%s\" ", XournalXMLHandler::encodeString(page.background.style).toUtf8().constData());
+        if (!page.background.domain.isNull())
+            gzprintf(f, "domain=\"%s\" ", XournalXMLHandler::encodeString(page.background.domain).toUtf8().constData());
+        if (!page.background.filename.isNull())
+            gzprintf(f, "filename=\"%s\" ", XournalXMLHandler::encodeString(page.background.filename).toUtf8().constData());
+        if (!page.background.pageno.isNull())
+            gzprintf(f, "pageno=\"%s\" ", XournalXMLHandler::encodeString(page.background.pageno).toUtf8().constData());
+        gzprintf(f, "/>\n");
+
         foreach (const ScribbleLayer &layer, page.layers) {
             gzprintf(f, "<layer>\n");
             foreach (const ScribbleStroke &stroke, layer.items) {
-                QColor color(stroke.getPen().color());
-                gzprintf(f, "<stroke tool=\"pen\" color=\"black\" width=\"%.2f\">",
-                         /*color ,*/ stroke.getPen().widthF());
+                unsigned int color = stroke.getPen().color().rgba();
+                /* alpha channel is msB in Qt and lsB in Xournal */
+                color = (color << 8) || (color >> 24);
+                gzprintf(f, "<stroke tool=\"pen\" color=\"#%08x\" width=\"%.2f\">",
+                         color, stroke.getPen().widthF());
                 foreach (const QPointF &point, stroke.getPoints()) {
                     gzprintf(f, "%.2f %.2f ", point.x(), point.y());
                 }
                 gzprintf(f, "\n</stroke>\n");
+                /* TODO error for text items */
             }
             gzprintf(f, "</layer>\n");
         }

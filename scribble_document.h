@@ -44,13 +44,26 @@ public:
     QList<ScribbleStroke> items;
 };
 
+class ScribbleXournalBackground
+{
+public:
+    /* if these are null (QString::isNull), the
+     * respective attributes are not present */
+    QString type;
+    QString color;
+    QString style;
+    QString domain;
+    QString filename;
+    QString pageno;
+};
+
 class ScribblePage
 {
 public:
     ScribblePage() : size(QSizeF(612, 792)) {} /* TODO use reasonable values */
     QList<ScribbleLayer> layers;
     QSizeF size;
-    /* TODO background */
+    ScribbleXournalBackground background;
 };
 
 class EraserContext
@@ -83,6 +96,18 @@ public:
     bool endDocument();
 
     bool fatalError(const QXmlParseException &exception);
+
+    /* convenience functions for reading and writing */
+    static QString encodeString(const QString &str) {
+        QString text = str;
+        return text.replace("&", "&amp;").replace("\"","&quot;")
+                .replace("'", "&apos;").replace("<", "&lt;")
+                .replace(">", "&gt;");
+    }
+    /* returns the null string if the attribute does not exist */
+    static QString getAttribute(const QXmlAttributes &attrs, const QString &attr) {
+        return attrs.index(attr) < 0 ? QString() : attrs.value(attr);
+    }
 
 public:
     QString getTitle() const { return title; }
