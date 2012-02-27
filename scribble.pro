@@ -7,7 +7,7 @@ SOURCES += scribble.cpp \
 
 LIBS += -L /usr/local/lib -lz -lonyxapp -lonyx_base -lonyx_ui -lonyx_screen -lonyx_sys -lonyx_wpa -lonyx_wireless -lonyx_data -lonyx_touch -lonyx_cms
 
-INCLUDEPATH += /opt/onyx/arm/iclude
+INCLUDEPATH += /opt/onyx/arm/include
 
 HEADERS += \
     mainwidget.h \
