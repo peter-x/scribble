@@ -129,9 +129,11 @@ void MainWidget::keyPressEvent(QKeyEvent *event)
         save();
         qApp->exit();
     case Qt::Key_Right:
+    case Qt::Key_PageDown:
         document->nextPage();
         break;
     case Qt::Key_Left:
+    case Qt::Key_PageUp:
         document->previousPage();
         break;
     default:
