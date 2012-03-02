@@ -288,25 +288,33 @@ bool ScribbleDocument::saveXournalFile(const QFile &file)
                  page.size.width(),
                  page.size.height());
 
-        gzprintf(f, "<background type=\"%s\" ", XournalXMLHandler::encodeString(page.background.type).toUtf8().constData());
-        if (!page.background.color.isNull())
-            gzprintf(f, "color=\"%s\" ", XournalXMLHandler::encodeString(page.background.color).toUtf8().constData());
-        if (!page.background.style.isNull())
-            gzprintf(f, "style=\"%s\" ", XournalXMLHandler::encodeString(page.background.style).toUtf8().constData());
-        if (!page.background.domain.isNull())
-            gzprintf(f, "domain=\"%s\" ", XournalXMLHandler::encodeString(page.background.domain).toUtf8().constData());
-        if (!page.background.filename.isNull())
-            gzprintf(f, "filename=\"%s\" ", XournalXMLHandler::encodeString(page.background.filename).toUtf8().constData());
-        if (!page.background.pageno.isNull())
-            gzprintf(f, "pageno=\"%s\" ", XournalXMLHandler::encodeString(page.background.pageno).toUtf8().constData());
+        ScribbleXournalBackground background = page.background;
+        if (background.type.isNull()) {
+            /* default background style */
+            background.type = "solid";
+            background.style = "plain";
+            background.color = "white";
+        }
+
+        gzprintf(f, "<background type=\"%s\" ", XournalXMLHandler::encodeString(background.type).toUtf8().constData());
+        if (!background.color.isNull())
+            gzprintf(f, "color=\"%s\" ", XournalXMLHandler::encodeString(background.color).toUtf8().constData());
+        if (!background.style.isNull())
+            gzprintf(f, "style=\"%s\" ", XournalXMLHandler::encodeString(background.style).toUtf8().constData());
+        if (!background.domain.isNull())
+            gzprintf(f, "domain=\"%s\" ", XournalXMLHandler::encodeString(background.domain).toUtf8().constData());
+        if (!background.filename.isNull())
+            gzprintf(f, "filename=\"%s\" ", XournalXMLHandler::encodeString(background.filename).toUtf8().constData());
+        if (!background.pageno.isNull())
+            gzprintf(f, "pageno=\"%s\" ", XournalXMLHandler::encodeString(background.pageno).toUtf8().constData());
         gzprintf(f, "/>\n");
 
         foreach (const ScribbleLayer &layer, page.layers) {
             gzprintf(f, "<layer>\n");
             foreach (const ScribbleStroke &stroke, layer.items) {
-                unsigned int color = stroke.getPen().color().rgba();
+                quint32 color = stroke.getPen().color().rgba();
                 /* alpha channel is msB in Qt and lsB in Xournal */
-                color = (color << 8) || (color >> 24);
+                color = (color << 8) | (color >> 24);
                 gzprintf(f, "<stroke tool=\"pen\" color=\"#%08x\" width=\"%.2f\">",
                          color, stroke.getPen().widthF());
                 foreach (const QPointF &point, stroke.getPoints()) {
@@ -362,8 +370,13 @@ bool ScribbleDocument::setCurrentPage(int index)
     if (index < 0 || index >= pages.length())
         return false;
     endCurrentStroke();
-    currentPage = index;
-    currentLayer = qMin(currentLayer, getCurrentPage().layers.length() - 1);
+    if (currentLayer == getCurrentPage().layers.length() - 1) {
+        currentPage = index;
+        currentLayer = getCurrentPage().layers.length() - 1;
+    } else {
+        currentPage = index;
+        currentLayer = qMin(currentLayer, getCurrentPage().layers.length() - 1);
+    }
     emit pageOrLayerNumberChanged(currentPage, pages.length(), currentLayer, getCurrentPage().layers.length());
     emit pageOrLayerChanged(getCurrentPage(), currentLayer);
     return true;
@@ -373,6 +386,8 @@ void ScribbleDocument::nextPage()
 {
     if (currentPage + 1 >= pages.length()) {
         ScribblePage p;
+        if (!currentViewSize.isEmpty())
+            p.size = currentViewSize;
         p.layers.append(ScribbleLayer());
         pages.append(p);
     }

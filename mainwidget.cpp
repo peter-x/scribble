@@ -77,6 +77,7 @@ MainWidget::MainWidget(QWidget *parent) :
     onyx::screen::watcher().addWatcher(this);
 
     connect(document, SIGNAL(pageOrLayerNumberChanged(int,int,int,int)), SLOT(updateProgressBar(int,int,int,int)));
+    connect(scribbleArea, SIGNAL(resized(QSize)), document, SLOT(setViewSize(QSize)));
     connect(statusBar, SIGNAL(progressClicked(int,int)), SLOT(setPage(int,int)));
 
     connect(&touchListener, SIGNAL(touchData(TouchData &)), this, SLOT(touchEventDataReceived(TouchData &)));

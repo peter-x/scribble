@@ -142,8 +142,9 @@ ScribbleArea::ScribbleArea(QWidget *parent, const ScribbleDocument *document) :
     connect(document, SIGNAL(strokesChanged(ScribblePage,int,QList<ScribbleStroke>)), SLOT(updateStrokes(ScribblePage,int,QList<ScribbleStroke>)));
 }
 
-void ScribbleArea::resizeEvent(QResizeEvent *)
+void ScribbleArea::resizeEvent(QResizeEvent *ev)
 {
+    emit resized(ev->size());
     redrawPage(document->getCurrentPage(), document->getCurrentLayer());
 }
 

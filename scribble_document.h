@@ -164,6 +164,7 @@ public slots:
     void mouseMoveEvent(QMouseEvent *);
     void mouseReleaseEvent(QMouseEvent *);
 
+    void setViewSize(const QSize &size) { currentViewSize = size; }
 private:
     enum ScribbleMode {
         PEN, ERASER
@@ -181,8 +182,11 @@ private:
 
     QPen currentPen;
 
+    /* used when a new page is created */
+    QSize currentViewSize;
+
     /* if currentMode == PEN && sketching then the last item in the current page
-     * and layer (exists and) is currently extended my mouse movements */
+     * and layer (exists and) is currently extended by mouse movements */
     bool sketching;
     ScribbleMode currentMode;
 

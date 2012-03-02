@@ -37,6 +37,7 @@ public:
     explicit ScribbleArea(QWidget *parent, const ScribbleDocument *document);
 
 signals:
+    void resized(const QSize &size);
 
 public slots:
     void redrawPage(const ScribblePage &page, int layer);
