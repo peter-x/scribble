@@ -107,6 +107,12 @@ void MainWidget::keyPressEvent(QKeyEvent *event)
     case Qt::Key_Escape:
         save();
         qApp->exit();
+    case Qt::Key_Right:
+        document->nextPage();
+        break;
+    case Qt::Key_Left:
+        document->previousPage();
+        break;
     default:
         QWidget::keyPressEvent(event);
     }
