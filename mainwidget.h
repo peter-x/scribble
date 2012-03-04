@@ -61,6 +61,8 @@ private:
     TouchEventListener touchListener;
     int pressure_of_last_point_;
 
+    bool touchActive;
+
     QFile currentFile;
     ScribbleArea *scribbleArea;
     ScribbleDocument *document;

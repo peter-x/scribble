@@ -51,6 +51,9 @@ private:
     void updateTreeView();
     void updateModel();
 
+    void keyPressEvent(QKeyEvent *);
+    void keyReleaseEvent(QKeyEvent *);
+
     QStringList realToVirtualPath(const QString &path);
 
 private:

@@ -31,7 +31,7 @@
 #include "onyx/ui/thumbnail_view.h"
 
 MainWidget::MainWidget(QWidget *parent) :
-    QWidget(parent, Qt::FramelessWindowHint), currentFile("")
+    QWidget(parent, Qt::FramelessWindowHint), touchActive(true), currentFile("")
 {
     document = new ScribbleDocument(this);
     scribbleArea = new ScribbleArea(this, document);
@@ -127,6 +127,8 @@ MainWidget::MainWidget(QWidget *parent) :
 
 void MainWidget::loadFile(const QFile &file)
 {
+    save();
+
     /* TODO error message */
     if (document->loadXournalFile(file)) {
         currentFile.setFileName(file.fileName());
@@ -160,6 +162,8 @@ void MainWidget::keyPressEvent(QKeyEvent *event)
 
 void MainWidget::touchEventDataReceived(TouchData &data)
 {
+    if (!touchActive) return;
+
     // get widget pos
     OnyxTouchPoint &touch_point = data.points[0];
     QPoint global_pos(touch_point.x, touch_point.y);
@@ -228,11 +232,15 @@ void MainWidget::mouseReleaseEvent(QMouseEvent *ev)
 
 void MainWidget::open()
 {
+    touchActive = false;
+
     FileBrowser fileBrowser(this);
     QString path = fileBrowser.showLoadFile(currentFile.fileName());
     if (path.isEmpty())
         return;
     loadFile(QFile(path));
+
+    touchActive = true;
 }
 
 void MainWidget::saveAs()
@@ -257,6 +265,6 @@ void MainWidget::setPage(int percentage, int page)
 
 void MainWidget::save()
 {
-    if (currentFile.fileName() != "")
+    if (!currentFile.fileName().isEmpty())
         document->saveXournalFile(currentFile);
 }

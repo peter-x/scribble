@@ -62,6 +62,7 @@ FileBrowser::FileBrowser(QWidget *parent)
       statusBar(0, ui::PROGRESS | ui::MESSAGE)
 {
     setModal(true);
+    treeView.setFocusPolicy(Qt::TabFocus);
 
     setAutoFillBackground(true);
     setBackgroundRole(QPalette::Dark);
@@ -84,6 +85,7 @@ FileBrowser::FileBrowser(QWidget *parent)
             &statusBar, SLOT(setProgress(int, int)));
     connect(&statusBar, SIGNAL(progressClicked(const int, const int)),
             SLOT(onStatusBarClicked(const int, const int)));
+    treeView.setFocus();
 }
 
 FileBrowser::~FileBrowser()
@@ -205,6 +207,30 @@ QStringList FileBrowser::realToVirtualPath(const QString &rPath)
         }
     }
     return path.split('/');
+}
+
+void FileBrowser::keyPressEvent(QKeyEvent *ev)
+{
+    ev->accept();
+}
+
+void FileBrowser::keyReleaseEvent(QKeyEvent *ev)
+{
+    switch (ev->key()) {
+    case Qt::Key_Left:
+    case Qt::Key_Right:
+    case Qt::Key_Up:
+    case Qt::Key_Down:
+    case Qt::Key_PageUp:
+    case Qt::Key_PageDown:
+    case Qt::Key_Enter:
+    case Qt::Key_Return:
+        treeView.keyReleaseEvent(ev);
+        break;
+    case Qt::Key_Escape:
+        reject();
+        break;
+    }
 }
 
 void FileBrowser::onItemActivated(const QModelIndex &idx)
