@@ -66,8 +66,12 @@ FileBrowser::FileBrowser(QWidget *parent)
     setAutoFillBackground(true);
     setBackgroundRole(QPalette::Dark);
 
+    breadCrumbsLayout.setAlignment(Qt::AlignLeft);
+
     layout.setSpacing(0);
     layout.setContentsMargins(0, 0, 0, 0);
+
+    layout.addLayout(&breadCrumbsLayout);
 
     treeView.showHeader(false);
     layout.addWidget(&treeView, 1);
@@ -87,34 +91,71 @@ FileBrowser::~FileBrowser()
 
 }
 
-QString FileBrowser::showLoadFile()
+QString FileBrowser::showLoadFile(const QString &path)
 {
+    QString absPath = path;
+    if (!QDir(path).exists()) {
+        /* perhaps it is a file inside the directory */
+        if (QFile(path).exists()) {
+            QDir dir(path);
+            dir.cdUp();
+            absPath = dir.absolutePath();
+            /* TODO hilight that file */
+        }
+    }
+    if (!QFile(absPath).exists()) {
+        absPath = QString();
+    }
+
+    currentPath = realToVirtualPath(absPath);
     updateTreeView();
 
     showMaximized();
     onyx::screen::instance().flush(this, onyx::screen::ScreenProxy::GC);
 
-    exec();
-
-    return currentRealPath;
+    if (exec() == QDialog::Accepted)
+        return currentRealPath;
+    else
+        return QString();
 }
 
-void FileBrowser::updateRealPath()
+void FileBrowser::updateBreadCrumbs()
 {
-    if (currentPath.isEmpty()) {
-        currentRealPath = QString();
-    } else {
-        currentRealPath = currentPath.join("/");
+    QLayoutItem *it;
+    while ((it = breadCrumbsLayout.takeAt(0)) != 0) {
+        delete it;
     }
+
+    QStringList path;
+
+    ui::OnyxPushButton *button = new ui::OnyxPushButton(" ", 0);
+    button->setData(path);
+    connect(button, SIGNAL(released()), SLOT(onBreadCrumbActivated()));
+    breadCrumbsLayout.addWidget(button);
+
+    foreach (const QString &p, currentPath) {
+        path.append(p);
+        button = new ui::OnyxPushButton(p, 0);
+        button->setData(path);
+        connect(button, SIGNAL(released()), SLOT(onBreadCrumbActivated()));
+        breadCrumbsLayout.addWidget(button);
+    }
+
+    breadCrumbsLayout.addStretch(1);
+
+    button = new ui::OnyxPushButton(QIcon(":/images/close.png"), "", this);
+    connect(button, SIGNAL(released()), SLOT(reject()));
+    breadCrumbsLayout.addWidget(button);
 }
 
 void FileBrowser::updateTreeView()
 {
+    updateBreadCrumbs();
     treeView.clear();
     updateModel();
     treeView.setModel(&model);
-    treeView.update();
     statusBar.setProgress(treeView.currentPage(), treeView.pages());
+    update();
 }
 
 void FileBrowser::updateModel()
@@ -123,13 +164,15 @@ void FileBrowser::updateModel()
 
     if (currentPath.isEmpty()) {
         /* TODO only if they exist */
-        builder.addItem(QIcon(":/images/sketch.png"), "Internal Scribbles", QDir::homePath() + QString("/notes"));
+        //builder.addItem(QIcon(":/images/sketch.png"), "Internal Scribbles", QDir::homePath() + QString("/notes"));
         builder.addItem(QIcon(), "Flash", LIBRARY_ROOT);
         builder.addItem(QIcon(), "SD Card", SDMMC_ROOT);
         builder.addItem(QIcon(), "Root", "/");
         return;
     }
     builder.addItem(QIcon(), "Up", "..");
+
+    currentRealPath = currentPath.join("/");
 
     QDir dir(currentRealPath);
     dir.setFilter(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
@@ -141,6 +184,29 @@ void FileBrowser::updateModel()
     }
 }
 
+QStringList FileBrowser::realToVirtualPath(const QString &rPath)
+{
+    if (rPath.isEmpty()) return QStringList();
+
+    QString path = QDir(rPath).absolutePath();
+    /* TODO define these paths only at one place */
+    QStringList vRoots;
+    vRoots.append(QDir::homePath() + QString("/notes"));
+    vRoots.append(LIBRARY_ROOT);
+    vRoots.append(SDMMC_ROOT);
+    vRoots.append("/");
+    foreach (const QString &vr, vRoots) {
+        if (path.startsWith(vr)) {
+            QStringList vPath;
+            vPath.append(vr);
+            int tailStart = vr.length() + (vr.endsWith("/") ? 0 : 1);
+            vPath.append(path.mid(tailStart).split('/'));
+            return vPath;
+        }
+    }
+    return path.split('/');
+}
+
 void FileBrowser::onItemActivated(const QModelIndex &idx)
 {
     QStandardItem *item = model.itemFromIndex(idx);
@@ -150,18 +216,33 @@ void FileBrowser::onItemActivated(const QModelIndex &idx)
     } else {
         currentPath += data;
     }
-    updateRealPath();
+
+    currentRealPath = currentPath.isEmpty() ? QString() : currentPath.join("/");
+
     if (currentRealPath.isEmpty() || QDir(currentRealPath).exists()) {
         updateTreeView();
     } else if (QFile(currentRealPath).exists()) {
         accept();
     } else {
         /* TODO error */
+        currentRealPath = QString();
         reject();
     }
 }
 
 void FileBrowser::onStatusBarClicked(const int percentage, const int page)
 {
+    Q_UNUSED(percentage);
     treeView.jumpToPage(page);
+}
+
+void FileBrowser::onBreadCrumbActivated()
+{
+    /* TODO qobject_cast would be better but seems not to be usable */
+    ui::OnyxPushButton *button = reinterpret_cast<ui::OnyxPushButton *>(sender());
+    if (button == 0)
+        return;
+    currentPath = button->data().toStringList();
+    qDebug() << currentPath;
+    updateTreeView();
 }

@@ -78,10 +78,12 @@ MainWidget::MainWidget(QWidget *parent) :
     connect(open, SIGNAL(triggered()), SLOT(open()));
     toolbar->addAction(open);
 
+    /*
     QAction *save = new QAction(QIcon(":/images/save_document.png"),
                                 "save as", this);
     connect(save, SIGNAL(triggered()), SLOT(saveAs()));
     toolbar->addAction(save);
+    */
 
     QAction *right = new QAction(QIcon(":/images/right_arrow.png"),
                                 "next page", this);
@@ -227,7 +229,7 @@ void MainWidget::mouseReleaseEvent(QMouseEvent *ev)
 void MainWidget::open()
 {
     FileBrowser fileBrowser(this);
-    QString path = fileBrowser.showLoadFile();
+    QString path = fileBrowser.showLoadFile(currentFile.fileName());
     if (path.isEmpty())
         return;
     loadFile(QFile(path));

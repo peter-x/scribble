@@ -22,10 +22,11 @@
 #define FILEBROWSER_H
 
 #include <QObject>
+#include <QList>
 
 #include "tree_view.h"
 
-#include "onyx/ui/tree_view.h"
+#include "onyx/ui/buttons.h"
 #include "onyx/ui/status_bar.h"
 
 
@@ -36,29 +37,27 @@ public:
     explicit FileBrowser(QWidget *parent = 0);
     ~FileBrowser();
 
-    QString showLoadFile();
-    QString selectedFile();
+    QString showLoadFile(const QString &path = QString());
 
 private slots:
     void onItemActivated(const QModelIndex &);
     void onStatusBarClicked(const int, const int);
+    void onBreadCrumbActivated();
 
 public slots:
 
 private:
-    void updateRealPath();
+    void updateBreadCrumbs();
     void updateTreeView();
     void updateModel();
 
-    void pathUp();
-    void setCurrentPath();
-    //QString getIcon(const QFileInfo &fileInfo);
-    //QString getDisplayName(const QFileInfo &fileInfo);
+    QStringList realToVirtualPath(const QString &path);
 
 private:
     QString currentRealPath;
     QStringList currentPath;
     QVBoxLayout layout;
+    QHBoxLayout breadCrumbsLayout;
     QStandardItemModel model;
     obx::ObxTreeView treeView;
     ui::StatusBar statusBar;
