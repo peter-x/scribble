@@ -47,6 +47,9 @@ private slots:
     void mouseMoveEvent(QMouseEvent *ev);
     void mouseReleaseEvent(QMouseEvent *ev);
 
+    void saveAs();
+    void open();
+
     void updateProgressBar(int currentPage, int maxPages, int currentLayer, int maxLayers);
     void setPage(int percentage, int page);
 

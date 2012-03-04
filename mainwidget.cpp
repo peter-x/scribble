@@ -20,11 +20,15 @@
 
 #include "mainwidget.h"
 
+#include "filebrowser.h"
+
 #include "onyx/screen/screen_proxy.h"
 #include "onyx/screen/screen_update_watcher.h"
 
 #include "onyx/ui/toolbar.h"
 #include "onyx/ui/status_bar.h"
+#include "onyx/ui/onyx_dialog.h"
+#include "onyx/ui/thumbnail_view.h"
 
 MainWidget::MainWidget(QWidget *parent) :
     QWidget(parent, Qt::FramelessWindowHint), currentFile("")
@@ -67,6 +71,17 @@ MainWidget::MainWidget(QWidget *parent) :
     connect(thick, SIGNAL(triggered()), this, SLOT(sizeThick()));
     toolbar->addAction(thick);
     */
+
+    /* TODO icon at least looks like "open" */
+    QAction *open = new QAction(QIcon(":/images/config.png"),
+                                "open document", this);
+    connect(open, SIGNAL(triggered()), SLOT(open()));
+    toolbar->addAction(open);
+
+    QAction *save = new QAction(QIcon(":/images/save_document.png"),
+                                "save as", this);
+    connect(save, SIGNAL(triggered()), SLOT(saveAs()));
+    toolbar->addAction(save);
 
     QAction *right = new QAction(QIcon(":/images/right_arrow.png"),
                                 "next page", this);
@@ -207,6 +222,25 @@ void MainWidget::mouseReleaseEvent(QMouseEvent *ev)
     data.points[0].y = ev->globalY();
     data.points[0].pressure = 0;
     touchEventDataReceived(data);
+}
+
+void MainWidget::open()
+{
+    FileBrowser fileBrowser(this);
+    QString path = fileBrowser.showLoadFile();
+    if (path.isEmpty())
+        return;
+    loadFile(QFile(path));
+}
+
+void MainWidget::saveAs()
+{
+    QString file = QFileDialog::getSaveFileName(this, "Save Scribble File",
+                                                currentFile.fileName(),
+                                                "Xournal Files (*.xoj);;All Files (*)");
+    if (!file.isEmpty()) {
+        saveFile(QFile(file));
+    }
 }
 
 void MainWidget::updateProgressBar(int currentPage, int maxPages, int currentLayer, int maxLayers)
