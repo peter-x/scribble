@@ -53,10 +53,10 @@ QByteArray ScribblePage::getXmlRepresentation() const
     /* TODO Can we cache this? During autosave, it is computed in the
      * other thread. Getting the information back would save
      * quite some CPU. */
-    QString output;
+    QByteArray output;
     output += QString().sprintf("<page width=\"%.2f\" height=\"%.2f\">\n",
                                 size.width(),
-                                size.height());
+                                size.height()).toUtf8();
 
     ScribbleXournalBackground back = background;
     if (back.type.isNull()) {
@@ -66,17 +66,17 @@ QByteArray ScribblePage::getXmlRepresentation() const
         back.color = "white";
     }
 
-    output += QString().sprintf("<background type=\"%s\" ", XournalXMLHandler::encodeString(back.type).toUtf8().constData());
+    output += "<background type=\"" + XournalXMLHandler::encodeString(back.type).toUtf8() + "\" ";
     if (!back.color.isNull())
-        output += QString().sprintf("color=\"%s\" ", XournalXMLHandler::encodeString(back.color).toUtf8().constData());
+        output += "color=\"" + XournalXMLHandler::encodeString(back.color).toUtf8() + "\" ";
     if (!back.style.isNull())
-        output += QString().sprintf("style=\"%s\" ", XournalXMLHandler::encodeString(back.style).toUtf8().constData());
+        output += "style=\"" + XournalXMLHandler::encodeString(back.style).toUtf8() + "\" ";
     if (!back.domain.isNull())
-        output += QString().sprintf("domain=\"%s\" ", XournalXMLHandler::encodeString(back.domain).toUtf8().constData());
+        output += "domain=\"" + XournalXMLHandler::encodeString(back.domain).toUtf8() + "\" ";
     if (!back.filename.isNull())
-        output += QString().sprintf("filename=\"%s\" ", XournalXMLHandler::encodeString(back.filename).toUtf8().constData());
+        output += "filename=\"" + XournalXMLHandler::encodeString(back.filename).toUtf8() + "\" ";
     if (!back.pageno.isNull())
-        output += QString().sprintf("pageno=\"%s\" ", XournalXMLHandler::encodeString(back.pageno).toUtf8().constData());
+        output += "pageno=\"" + XournalXMLHandler::encodeString(back.pageno).toUtf8() + "\" ";
     output += "/>\n";
 
     foreach (const ScribbleLayer &layer, layers) {
@@ -86,17 +86,30 @@ QByteArray ScribblePage::getXmlRepresentation() const
             /* alpha channel is msB in Qt and lsB in Xournal */
             color = (color << 8) | (color >> 24);
             output += QString().sprintf("<stroke tool=\"pen\" color=\"#%08x\" width=\"%.2f\">",
-                     color, stroke.getPen().widthF());
+                     color, stroke.getPen().widthF()).toUtf8();
+            int pos = output.size();
+            output.resize(output.size() + stroke.getPoints().size() * 14);
             foreach (const QPointF &point, stroke.getPoints()) {
-                output += QString().sprintf("%.2f %.2f ", point.x(), point.y());
+                int written;
+                while (1) {
+                    written = snprintf(output.data() + pos, output.size() - pos,
+                                   "%.2f %.2f ", point.x(), point.y());
+                    if (written >= output.size() - pos) {
+                        output.resize(output.size() + 1024);
+                    } else {
+                        break;
+                    }
+                }
+                pos += written;
             }
-            output += QString().sprintf("\n</stroke>\n");
+            output.resize(pos);
+            output += "\n</stroke>\n";
             /* TODO error for text items */
         }
         output += "</layer>\n";
     }
     output += "</page>\n";
-    return output.toUtf8();
+    return output;
 }
 
 
@@ -171,14 +184,16 @@ bool XournalXMLHandler::endElement(const QString &namespaceURI, const QString &l
 {
     Q_UNUSED(namespaceURI);
     Q_UNUSED(qName);
+    static QRegExp splitter("\\s+");
 
     if (localName == "stroke") {
         ScribbleStroke &s = pages.last().layers.last().items.last();
-        QStringList chunks = currentStrokeString.split(QRegExp("\\s+"), QString::SkipEmptyParts);
+        QStringList chunks = currentStrokeString.split(splitter, QString::SkipEmptyParts);
+        QVector<QPointF> points(chunks.length() / 2);
         for (int i = 0; i < chunks.length() - 1; i += 2) {
-            /* TODO appendPoints? */
-            s.appendPoint(QPointF(chunks[i].toFloat(), chunks[i + 1].toFloat()));
+            points[i / 2] = QPointF(chunks[i].toFloat(), chunks[i + 1].toFloat());
         }
+        s.appendPoints(points);
         currentStrokeString.clear();
     }
     currentLocalName.clear();
