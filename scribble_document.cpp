@@ -24,7 +24,7 @@
 #include <QHash>
 #include <QColor>
 
-#include "zlib.h"
+#include "fileio.h"
 
 bool ScribbleStroke::segmentIntersects(int i, const ScribbleStroke &o) const
 {
@@ -47,6 +47,59 @@ void ScribbleStroke::updateBoundingRect()
     /* bounding rect with zero width or height produces not the intended result */
     boundingRect.adjust(-a, -a, a, a);
 }
+
+QByteArray ScribblePage::getXmlRepresentation() const
+{
+    /* TODO Can we cache this? During autosave, it is computed in the
+     * other thread. Getting the information back would save
+     * quite some CPU. */
+    QString output;
+    output += QString().sprintf("<page width=\"%.2f\" height=\"%.2f\">\n",
+                                size.width(),
+                                size.height());
+
+    ScribbleXournalBackground back = background;
+    if (back.type.isNull()) {
+        /* default background style */
+        back.type = "solid";
+        back.style = "plain";
+        back.color = "white";
+    }
+
+    output += QString().sprintf("<background type=\"%s\" ", XournalXMLHandler::encodeString(back.type).toUtf8().constData());
+    if (!back.color.isNull())
+        output += QString().sprintf("color=\"%s\" ", XournalXMLHandler::encodeString(back.color).toUtf8().constData());
+    if (!back.style.isNull())
+        output += QString().sprintf("style=\"%s\" ", XournalXMLHandler::encodeString(back.style).toUtf8().constData());
+    if (!back.domain.isNull())
+        output += QString().sprintf("domain=\"%s\" ", XournalXMLHandler::encodeString(back.domain).toUtf8().constData());
+    if (!back.filename.isNull())
+        output += QString().sprintf("filename=\"%s\" ", XournalXMLHandler::encodeString(back.filename).toUtf8().constData());
+    if (!back.pageno.isNull())
+        output += QString().sprintf("pageno=\"%s\" ", XournalXMLHandler::encodeString(back.pageno).toUtf8().constData());
+    output += "/>\n";
+
+    foreach (const ScribbleLayer &layer, layers) {
+        output += "<layer>\n";
+        foreach (const ScribbleStroke &stroke, layer.items) {
+            quint32 color = stroke.getPen().color().rgba();
+            /* alpha channel is msB in Qt and lsB in Xournal */
+            color = (color << 8) | (color >> 24);
+            output += QString().sprintf("<stroke tool=\"pen\" color=\"#%08x\" width=\"%.2f\">",
+                     color, stroke.getPen().widthF());
+            foreach (const QPointF &point, stroke.getPoints()) {
+                output += QString().sprintf("%.2f %.2f ", point.x(), point.y());
+            }
+            output += QString().sprintf("\n</stroke>\n");
+            /* TODO error for text items */
+        }
+        output += "</layer>\n";
+    }
+    output += "</page>\n";
+    return output.toUtf8();
+}
+
+
 
 /* ---------------------------------------------------------------- */
 
@@ -245,29 +298,8 @@ ScribbleDocument::ScribbleDocument(QObject *parent) :
     initAfterLoad();
 }
 
-bool ScribbleDocument::loadXournalFile(const QFile &file)
+bool ScribbleDocument::loadXournalFile(QByteArray data)
 {
-    /* TODO do we have to free anything during file name conversion? */
-    gzFile f = gzopen(file.fileName().toLocal8Bit().constData(), "r");
-    if (f == 0) {
-        return false;
-    }
-
-    QByteArray data;
-
-    {
-        char buffer[1024];
-        while (!gzeof(f)) {
-            int len = gzread(f, buffer, 1024);
-            if (len < 0) {
-                gzclose(f);
-                return false;
-            }
-            data.append(buffer, len);
-        }
-        gzclose(f);
-    }
-
     QBuffer dataBuffer(&data);
     QXmlInputSource source(&dataBuffer);
     QXmlSimpleReader reader;
@@ -290,76 +322,34 @@ bool ScribbleDocument::loadXournalFile(const QFile &file)
     return true;
 }
 
-bool ScribbleDocument::saveXournalFile(const QFile &file)
+QByteArray ScribbleDocument::toXournalXMLFormat()
 {
-    /* TODO do we have to free anything during file name conversion? */
-    gzFile f = gzopen(file.fileName().toLocal8Bit().constData(), "w");
-    if (f == 0) {
-        return false;
-    }
+    return toXournalXMLFormat(pages);
+}
 
+QByteArray ScribbleDocument::toXournalXMLFormat(const QList<ScribblePage> &pages)
+{
     setlocale(LC_NUMERIC, "C");
 
-    gzprintf(f, "<?xml  version=\"1.0\" standalone=\"no\"?>\n"
+    QByteArray output = "<?xml  version=\"1.0\" standalone=\"no\"?>\n"
             "<xournal version=\"0.4.5\">\n"
-            "<title>Scribble document - see https://github.com/peter-x/scribble</title>\n");
-    foreach (const ScribblePage &page, pages) {
-        gzprintf(f, "<page width=\"%.2f\" height=\"%.2f\">\n",
-                 page.size.width(),
-                 page.size.height());
-
-        ScribbleXournalBackground background = page.background;
-        if (background.type.isNull()) {
-            /* default background style */
-            background.type = "solid";
-            background.style = "plain";
-            background.color = "white";
-        }
-
-        gzprintf(f, "<background type=\"%s\" ", XournalXMLHandler::encodeString(background.type).toUtf8().constData());
-        if (!background.color.isNull())
-            gzprintf(f, "color=\"%s\" ", XournalXMLHandler::encodeString(background.color).toUtf8().constData());
-        if (!background.style.isNull())
-            gzprintf(f, "style=\"%s\" ", XournalXMLHandler::encodeString(background.style).toUtf8().constData());
-        if (!background.domain.isNull())
-            gzprintf(f, "domain=\"%s\" ", XournalXMLHandler::encodeString(background.domain).toUtf8().constData());
-        if (!background.filename.isNull())
-            gzprintf(f, "filename=\"%s\" ", XournalXMLHandler::encodeString(background.filename).toUtf8().constData());
-        if (!background.pageno.isNull())
-            gzprintf(f, "pageno=\"%s\" ", XournalXMLHandler::encodeString(background.pageno).toUtf8().constData());
-        gzprintf(f, "/>\n");
-
-        foreach (const ScribbleLayer &layer, page.layers) {
-            gzprintf(f, "<layer>\n");
-            foreach (const ScribbleStroke &stroke, layer.items) {
-                quint32 color = stroke.getPen().color().rgba();
-                /* alpha channel is msB in Qt and lsB in Xournal */
-                color = (color << 8) | (color >> 24);
-                gzprintf(f, "<stroke tool=\"pen\" color=\"#%08x\" width=\"%.2f\">",
-                         color, stroke.getPen().widthF());
-                foreach (const QPointF &point, stroke.getPoints()) {
-                    gzprintf(f, "%.2f %.2f ", point.x(), point.y());
-                }
-                gzprintf(f, "\n</stroke>\n");
-                /* TODO error for text items */
-            }
-            gzprintf(f, "</layer>\n");
-        }
-        gzprintf(f, "</page>\n");
+            "<title>Scribble document - see https://github.com/peter-x/scribble</title>\n";
+    for (int i = 0; i < pages.length(); i ++) {
+        output += pages[i].getXmlRepresentation();
     }
-    gzprintf(f, "</xournal>\n");
-    gzclose(f);
+    output += "</xournal>\n";
 
     setlocale(LC_NUMERIC, "");
 
-    return true;
- }
+    return output;
+}
 
 void ScribbleDocument::initAfterLoad()
 {
     if (pages.length() == 0) {
         pages.append(ScribblePage());
         pages[0].layers.append(ScribbleLayer());
+        pages[0].invalidate();
     }
     currentPage = 0;
     currentLayer = getCurrentPage().layers.length() - 1;
@@ -369,6 +359,8 @@ void ScribbleDocument::initAfterLoad()
     currentMode = PEN;
     currentPen.setColor(QColor(0, 0, 0));
     currentPen.setWidth(1);
+
+    changedSinceLastSave = false;
 
     emit pageOrLayerNumberChanged(currentPage, pages.length(), currentLayer, getCurrentPage().layers.length());
     emit pageOrLayerChanged(getCurrentPage(), currentLayer);
@@ -425,6 +417,8 @@ void ScribbleDocument::layerUp()
     ScribblePage &p = pages[currentPage];
     if (currentLayer + 1 >= p.layers.length()) {
         p.layers.append(ScribbleLayer());
+        p.invalidate();
+        changedSinceLastSave = true;
     }
     currentLayer += 1;
     emit pageOrLayerNumberChanged(currentPage, pages.length(), currentLayer, getCurrentPage().layers.length());
@@ -451,6 +445,8 @@ void ScribbleDocument::mousePressEvent(QMouseEvent *event)
         l.items.append(ScribbleStroke(currentPen, QPolygonF()));
         currentStroke = &l.items.last();
         currentStroke->appendPoint(event->posF());
+        pages[currentPage].invalidate();
+        changedSinceLastSave = true;
         emit strokePointAdded(*currentStroke);
     } else {
         eraseAt(event->pos());
@@ -462,6 +458,8 @@ void ScribbleDocument::mouseMoveEvent(QMouseEvent *event)
     if (!sketching) return;
     if (currentMode == PEN) {
         currentStroke->appendPoint(event->posF());
+        pages[currentPage].invalidate();
+        changedSinceLastSave = true;
         emit strokePointAdded(*currentStroke);
     } else {
         eraseAt(event->pos());
@@ -474,6 +472,8 @@ void ScribbleDocument::mouseReleaseEvent(QMouseEvent *event)
 
     if (currentMode == PEN) {
         currentStroke->appendPoint(event->posF());
+        pages[currentPage].invalidate();
+        changedSinceLastSave = true;
         emit strokePointAdded(*currentStroke);
     } else {
         eraseAt(event->pos());
@@ -519,6 +519,9 @@ void ScribbleDocument::eraseAt(const QPointF &point)
         }
     }
 
-    if (!removedStrokes.isEmpty())
+    if (!removedStrokes.isEmpty()) {
+        pages[currentPage].invalidate();
+        changedSinceLastSave = true;
         emit strokesChanged(getCurrentPage(), currentLayer, removedStrokes);
+    }
 }

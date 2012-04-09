@@ -21,6 +21,7 @@
 #include "mainwidget.h"
 
 #include "filebrowser.h"
+#include "fileio.h"
 
 #include "onyx/screen/screen_proxy.h"
 #include "onyx/screen/screen_update_watcher.h"
@@ -113,6 +114,8 @@ MainWidget::MainWidget(QWidget *parent) :
     setLayout(layout);
     onyx::screen::watcher().addWatcher(this);
 
+    asyncWriter = new AsyncWriter(this);
+
     connect(document, SIGNAL(pageOrLayerNumberChanged(int,int,int,int)), SLOT(updateProgressBar(int,int,int,int)));
     connect(scribbleArea, SIGNAL(resized(QSize)), document, SLOT(setViewSize(QSize)));
     connect(statusBar, SIGNAL(progressClicked(int,int)), SLOT(setPage(int,int)));
@@ -120,7 +123,7 @@ MainWidget::MainWidget(QWidget *parent) :
     connect(&touchListener, SIGNAL(touchData(TouchData &)), this, SLOT(touchEventDataReceived(TouchData &)));
 
     QTimer *save_timer = new QTimer(this);
-    connect(save_timer, SIGNAL(timeout()), SLOT(save()));
+    connect(save_timer, SIGNAL(timeout()), SLOT(saveAsynchronously()));
     /* save every 5 seconds */
     save_timer->start(5000);
 }
@@ -130,14 +133,15 @@ void MainWidget::loadFile(const QFile &file)
     save();
 
     /* TODO error message */
-    if (document->loadXournalFile(file)) {
+    QByteArray data = FileIO::readGZFileLocked(file);
+    if (document->loadXournalFile(data)) {
         currentFile.setFileName(file.fileName());
     }
 }
 
 void MainWidget::saveFile(const QFile &file)
 {
-    document->saveXournalFile(file);
+    FileIO::writeGZFileLocked(file, document->toXournalXMLFormat());
     currentFile.setFileName(file.fileName());
 }
 
@@ -235,12 +239,22 @@ void MainWidget::open()
     touchActive = false;
 
     FileBrowser fileBrowser(this);
+    /* TODO save last path */
     QString path = fileBrowser.showLoadFile(currentFile.fileName());
     if (path.isEmpty())
         return;
     loadFile(QFile(path));
 
     touchActive = true;
+}
+
+void MainWidget::save()
+{
+    if (!currentFile.fileName().isEmpty()) {
+        asyncWriter->stopWriting();
+        /* save timeout cannot occur now since this is the same thread */
+        saveFile(currentFile);
+    }
 }
 
 void MainWidget::saveAs()
@@ -251,6 +265,7 @@ void MainWidget::saveAs()
     if (!file.isEmpty()) {
         saveFile(QFile(file));
     }
+    /* TODO set current filename */
 }
 
 void MainWidget::updateProgressBar(int currentPage, int maxPages, int currentLayer, int maxLayers)
@@ -263,8 +278,10 @@ void MainWidget::setPage(int percentage, int page)
     document->setCurrentPage(page - 1);
 }
 
-void MainWidget::save()
+void MainWidget::saveAsynchronously()
 {
-    if (!currentFile.fileName().isEmpty())
-        document->saveXournalFile(currentFile);
+    if (!currentFile.fileName().isEmpty() && document->hasChangedSinceLastSave()) {
+        document->setSaved();
+        asyncWriter->writeData(document->getPagesCopy(), currentFile);
+    }
 }

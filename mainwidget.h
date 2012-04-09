@@ -25,6 +25,7 @@
 
 #include "onyx/ui/status_bar.h"
 
+#include "asyncwriter.h"
 #include "scribblearea.h"
 #include "scribble_document.h"
 
@@ -37,9 +38,10 @@ public:
     void saveFile(const QFile&);
 
 signals:
+    void saveToGZFileAsynchronously(const QFile &file, const QByteArray &data);
 
 public slots:
-    void save();
+    void saveAsynchronously();
 
 private slots:
     void touchEventDataReceived(TouchData &);
@@ -47,6 +49,7 @@ private slots:
     void mouseMoveEvent(QMouseEvent *ev);
     void mouseReleaseEvent(QMouseEvent *ev);
 
+    void save();
     void saveAs();
     void open();
 
@@ -63,6 +66,7 @@ private:
 
     bool touchActive;
 
+    AsyncWriter *asyncWriter;
     QFile currentFile;
     ScribbleArea *scribbleArea;
     ScribbleDocument *document;

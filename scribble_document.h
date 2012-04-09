@@ -84,6 +84,11 @@ public:
     QList<ScribbleLayer> layers;
     QSizeF size;
     ScribbleXournalBackground background;
+
+    void invalidate() const {
+        /* TODO could be used to invalide cached XML representation */
+    }
+    QByteArray getXmlRepresentation() const;
 };
 
 class EraserContext
@@ -148,12 +153,18 @@ class ScribbleDocument : public QObject
     Q_OBJECT
 public:
     explicit ScribbleDocument(QObject *parent = 0);
-    bool loadXournalFile(const QFile &file);
-    bool saveXournalFile(const QFile &file);
+    bool loadXournalFile(QByteArray data);
+    QByteArray toXournalXMLFormat();
+    static QByteArray toXournalXMLFormat(const QList<ScribblePage> &pages);
+    /* TODO this will cause deep copies to occur upon the first
+     * change (i.e. first mouse move) */
+    QList<ScribblePage> getPagesCopy() const { return pages; }
 
     int getNumPages() const { return pages.length(); }
     const ScribblePage &getCurrentPage() const { return pages[currentPage]; }
     int getCurrentLayer() const { return currentLayer; }
+    bool hasChangedSinceLastSave() const { return changedSinceLastSave; }
+    void setSaved() { changedSinceLastSave = false; }
 
 signals:
     void pageOrLayerNumberChanged(int currentPage, int maxPages, int currentLayer, int maxLayers);
@@ -212,6 +223,8 @@ private:
 
     /* shortcut to last item of current layer (if it exists) */
     ScribbleStroke *currentStroke;
+
+    bool changedSinceLastSave;
 };
 
 
