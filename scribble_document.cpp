@@ -380,7 +380,7 @@ void ScribbleDocument::initAfterLoad()
     currentStroke = 0;
     currentMode = PEN;
     currentPen.setColor(QColor(0, 0, 0));
-    currentPen.setWidth(1);
+    currentPen.setWidth(2);
 
     changedSinceLastSave = false;
 
