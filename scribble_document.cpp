@@ -88,8 +88,13 @@ QByteArray ScribblePage::getXmlRepresentation() const
             output += QString().sprintf("<stroke tool=\"pen\" color=\"#%08x\" width=\"%.2f\">",
                      color, stroke.getPen().widthF()).toUtf8();
             int pos = output.size();
-            output.resize(output.size() + stroke.getPoints().size() * 14);
-            foreach (const QPointF &point, stroke.getPoints()) {
+            QPolygonF points(stroke.getPoints());
+            if (points.size() == 1) {
+                /* add a second point */
+                points.append(points[0]);
+            }
+            output.resize(output.size() + points.size() * 14);
+            foreach (const QPointF &point, points) {
                 int written;
                 while (1) {
                     written = snprintf(output.data() + pos, output.size() - pos,
@@ -257,6 +262,8 @@ bool EraserContext::erase(const ScribbleStroke *stroke, QList<ScribbleStroke> *r
 
     qreal halfWidthSq = width * width / 4.0;
 
+    /* TODO avoid creating strokes with only one point */
+
     /* we only check intersections with points, not
      * line segments */
     for (int i = 0; i < stroke->getPoints().size(); i ++) {
@@ -386,6 +393,9 @@ void ScribbleDocument::endCurrentStroke()
     if (!sketching) return;
 
     if (currentMode == PEN) {
+        if (currentStroke != 0 && currentStroke->getPoints().size() == 1) {
+            currentStroke->appendPoint(currentStroke->getPoints()[0]);
+        }
         emit strokeCompleted(*currentStroke);
         currentStroke = 0;
     }
