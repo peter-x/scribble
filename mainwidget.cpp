@@ -107,6 +107,8 @@ MainWidget::MainWidget(QWidget *parent) :
 
     QVBoxLayout *layout = new QVBoxLayout;
 
+    layout->setSpacing(0);
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(toolbar);
     layout->addWidget(scribbleArea);
     layout->addWidget(statusBar);
@@ -241,8 +243,10 @@ void MainWidget::open()
     FileBrowser fileBrowser(this);
     /* TODO save last path */
     QString path = fileBrowser.showLoadFile(currentFile.fileName());
-    if (path.isEmpty())
+    if (path.isEmpty()) {
+        touchActive = true;
         return;
+    }
     loadFile(QFile(path));
 
     touchActive = true;

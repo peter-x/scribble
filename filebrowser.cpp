@@ -59,7 +59,9 @@ private:
 FileBrowser::FileBrowser(QWidget *parent)
     : QDialog(parent), layout(this),
       treeView(0, &model),
-      statusBar(0, ui::PROGRESS | ui::MESSAGE)
+      statusBar(0, ui::PROGRESS | ui::MESSAGE |
+                   ui::BATTERY | ui::SCREEN_REFRESH |
+                   ui::CLOCK)
 {
     setModal(true);
     treeView.setFocusPolicy(Qt::TabFocus);
@@ -125,6 +127,10 @@ void FileBrowser::updateBreadCrumbs()
 {
     QLayoutItem *it;
     while ((it = breadCrumbsLayout.takeAt(0)) != 0) {
+        if (it->widget()) {
+            it->widget()->hide();
+            it->widget()->deleteLater();
+        }
         delete it;
     }
 
