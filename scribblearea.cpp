@@ -40,7 +40,8 @@ void ScribbleGraphicsContext::drawPage(const ScribblePage &page, int maxLayer)
 void ScribbleGraphicsContext::drawStroke(const ScribbleStroke &stroke)
 {
     QPen pen = stroke.getPen();
-    unsigned char color = undraw ? 0xff : pen.color().lightness();
+    unsigned char color = undraw ? 0xff : 0x00; //pen.color().lightness();
+    /* TODO can we draw in different levels of gray? */
 
     const QPolygonF &points = stroke.getPoints();
     if (painter) {
@@ -58,7 +59,8 @@ void ScribbleGraphicsContext::drawStroke(const ScribbleStroke &stroke)
 void ScribbleGraphicsContext::drawStrokeSegment(const ScribbleStroke &stroke, int i)
 {
     QPen pen = stroke.getPen();
-    unsigned char color = undraw ? 0xff : pen.color().lightness();
+    unsigned char color = undraw ? 0xff : 0x00; //pen.color().lightness();
+    /* TODO can we draw in different levels of gray? */
     const QPolygonF &points = stroke.getPoints();
     if (painter) {
         drawLinePainter(points[i].toPoint(), points[i + 1].toPoint(), color, qCeil(pen.widthF()));
