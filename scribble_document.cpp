@@ -82,11 +82,10 @@ QByteArray ScribblePage::getXmlRepresentation() const
     foreach (const ScribbleLayer &layer, layers) {
         output += "<layer>\n";
         foreach (const ScribbleStroke &stroke, layer.items) {
-            quint32 color = stroke.getPen().color().rgba();
-            /* alpha channel is msB in Qt and lsB in Xournal */
-            color = (color << 8) | (color >> 24);
+            QColor color = stroke.getPen().color();
+            quint32 colorVal = (((((color.red() << 8) | color.green()) << 8) | color.blue()) << 8) | color.alpha();
             output += QString().sprintf("<stroke tool=\"pen\" color=\"#%08x\" width=\"%.2f\">",
-                     color, stroke.getPen().widthF()).toUtf8();
+                     colorVal, stroke.getPen().widthF()).toUtf8();
             int pos = output.size();
             QPolygonF points(stroke.getPoints());
             if (points.size() == 1) {
@@ -123,12 +122,15 @@ QByteArray ScribblePage::getXmlRepresentation() const
 
 XournalXMLHandler::XournalXMLHandler()
 {
+    parseError("Document is empty.");
+    valid = false;
+
     xournal_colors["black"] = QColor("#000000");
     xournal_colors["blue"] = QColor("#3333cc");
     xournal_colors["red"] = QColor("#ff0000");
     xournal_colors["green"] = QColor("#008000");
     xournal_colors["gray"] = QColor("#808080");
-    xournal_colors["lightblue"] = QColor("#00c00f");
+    xournal_colors["lightblue"] = QColor("#00c0ff");
     xournal_colors["lightgreen"] = QColor("#00ff00");
     xournal_colors["magenta"] = QColor("#ff00ff");
     xournal_colors["orange"] = QColor("#ff8000");
@@ -138,6 +140,9 @@ XournalXMLHandler::XournalXMLHandler()
 
 bool XournalXMLHandler::startDocument()
 {
+    valid = true;
+    errorStr.clear();
+
     title.clear();
     pages.clear();
     currentLocalName.clear();
@@ -150,19 +155,45 @@ bool XournalXMLHandler::startElement(const QString &namespaceURI, const QString 
     Q_UNUSED(qName);
 
     if (localName == "stroke") {
-        /* TODO tools that are not pen */
-        //if (atts.value("tool") != "pen") return false;
-        /* TODO error for tools that are not pen */
+        if (atts.value("tool") != "pen") {
+            parseError("Document uses tools that are not pens.");
+            return false;
+        }
 
         QPen pen;
         ScribbleStroke stroke;
-        pen.setColor(xournal_colors[atts.value("color")]);
-        pen.setWidthF(atts.value("width").toFloat());
+        QString color = atts.value("color");
+        bool ok;
+        if (xournal_colors.contains(color)) {
+            pen.setColor(xournal_colors[color]);
+        } else if (color[0] == '#') {
+            quint32 col = color.mid(1).toUInt(&ok, 16);
+            if (!ok) {
+                parseError("Document uses invalid color format.");
+                return false;
+            }
+            pen.setColor(QColor((col >> 24) & 0xff, (col >> 16) & 0xff,
+                                (col >>  8) & 0xff,  col        & 0xff));
+        } else {
+            parseError("Document uses invalid color specification.");
+            return false;
+        }
+        pen.setWidthF(atts.value("width").toFloat(&ok));
+        if (!ok) {
+            parseError("Document uses invalid pen width.");
+            return false;
+        }
+        /* XXX variable width (multiple float values separated by whitespace) */
         stroke.setPen(pen);
         pages.last().layers.last().items.append(stroke);
     } else if (localName == "page") {
         ScribblePage p;
-        p.size = QSizeF(atts.value("width").toFloat(), atts.value("height").toFloat());
+        bool ok1, ok2;
+        p.size = QSizeF(atts.value("width").toFloat(&ok1), atts.value("height").toFloat(&ok2));
+        if (!ok1 || !ok2) {
+            parseError("Document uses invalid page size.");
+            return false;
+        }
         pages.append(p);
     } else if (localName == "background") {
         ScribblePage &p(pages.last());
@@ -176,9 +207,10 @@ bool XournalXMLHandler::startElement(const QString &namespaceURI, const QString 
         ScribbleLayer l;
         pages.last().layers.append(l);
     } else  if (localName == "title") {
-            title.clear();
+        title.clear();
     } else if (localName == "xournal") {
     } else {
+        parseError("Document contains invalid elements.");
         return false;
     }
     currentLocalName = localName;
@@ -212,7 +244,8 @@ bool XournalXMLHandler::endElement(const QString &namespaceURI, const QString &l
                     xValid = !xValid;
                 }
             } else {
-                qDebug() << "Invalid character: " << c;
+                parseError("Document contains invalid character in stroke description.");
+                return false;
             }
         }
         if (!chunk.isEmpty() && xValid) {
@@ -349,6 +382,8 @@ bool ScribbleDocument::loadXournalFile(QByteArray data)
     reader.setContentHandler(&handler);
     reader.setErrorHandler(&handler);
     if (!reader.parse(&source, false)) {
+        /* TODO message box */
+        qDebug() << "Parsing error:" << handler.errorString();
         return false;
     }
 

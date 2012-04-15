@@ -134,11 +134,21 @@ public:
         return attrs.index(attr) < 0 ? QString() : attrs.value(attr);
     }
 
-public:
     QString getTitle() const { return title; }
     QList<ScribblePage> getPages() const { return pages; }
+    bool isValid() const { return valid; }
+    QString errorString() const { return errorStr; }
 
 private:
+    void parseError(const QString &errorStr) {
+        valid = false;
+        if (this->errorStr.isEmpty())
+            this->errorStr = errorStr;
+    }
+
+    bool valid;
+    QString errorStr;
+
     QString title;
     QList<ScribblePage> pages;
 
