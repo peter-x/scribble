@@ -143,7 +143,7 @@ private:
     QList<ScribblePage> pages;
 
     QString currentLocalName;
-    QString currentStrokeString;
+    QByteArray currentStrokeString;
 
     QHash<QString, QColor> xournal_colors;
 };

@@ -189,14 +189,34 @@ bool XournalXMLHandler::endElement(const QString &namespaceURI, const QString &l
 {
     Q_UNUSED(namespaceURI);
     Q_UNUSED(qName);
-    static QRegExp splitter("\\s+");
 
     if (localName == "stroke") {
         ScribbleStroke &s = pages.last().layers.last().items.last();
-        QStringList chunks = currentStrokeString.split(splitter, QString::SkipEmptyParts);
-        QVector<QPointF> points(chunks.length() / 2);
-        for (int i = 0; i < chunks.length() - 1; i += 2) {
-            points[i / 2] = QPointF(chunks[i].toFloat(), chunks[i + 1].toFloat());
+        QByteArray chunk;
+        QVector<QPointF> points;
+        float x;
+        bool xValid = false;
+        for (int i = 0; i < currentStrokeString.length(); i ++) {
+            char c = currentStrokeString[i];
+            if (('0' <= c && c <= '9') || c == '.' || c == '+' || c == '-' || c == 'e' || c == 'E') {
+                chunk += c;
+            } else if (c == ' ' || c == '\n' || c == '\r') {
+                if (!chunk.isEmpty()) {
+                    float v = chunk.toFloat();
+                    chunk.clear();
+                    if (xValid) {
+                        points.append(QPointF(x, v));
+                    } else {
+                        x = v;
+                    }
+                    xValid = !xValid;
+                }
+            } else {
+                qDebug() << "Invalid character: " << c;
+            }
+        }
+        if (!chunk.isEmpty() && xValid) {
+            points.append(QPointF(x, chunk.toFloat()));
         }
         s.appendPoints(points);
         currentStrokeString.clear();
@@ -208,7 +228,7 @@ bool XournalXMLHandler::endElement(const QString &namespaceURI, const QString &l
 bool XournalXMLHandler::characters(const QString &ch)
 {
     if (currentLocalName == "stroke") {
-        currentStrokeString += ch;
+        currentStrokeString += ch.toAscii();
     } else if (currentLocalName == "title") {
         title += ch;
     }
@@ -218,7 +238,7 @@ bool XournalXMLHandler::characters(const QString &ch)
 bool XournalXMLHandler::ignorableWhitespace(const QString &ch)
 {
     if (currentLocalName == "stroke") {
-        currentStrokeString += ch;
+        currentStrokeString += ch.toAscii();
     } else if (currentLocalName == "title") {
         title += ch;
     }
