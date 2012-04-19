@@ -23,8 +23,7 @@
 
 #include <QWidget>
 #include <QPainter>
-
-#include "onyx/touch/touch_listener.h"
+#include <QTimer>
 
 #include "scribble_document.h"
 

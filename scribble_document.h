@@ -158,6 +158,18 @@ private:
     QHash<QString, QColor> xournal_colors;
 };
 
+class Stylus
+{
+public:
+    bool sketching;
+
+    enum Mode {
+        PEN, ERASER
+    } mode;
+
+    QPen pen;
+};
+
 class ScribbleDocument : public QObject
 {
     Q_OBJECT
@@ -188,8 +200,8 @@ signals:
     void strokesChanged(const ScribblePage &page, int layer, const QList<ScribbleStroke> &removedStrokes);
 
 public slots:
-    void usePen() { endCurrentStroke(); currentMode = PEN; currentPen.setWidth(2); }
-    void useEraser() { endCurrentStroke(); currentMode = ERASER; currentPen.setWidth(10); }
+    void usePen() { endCurrentStroke(); stylus.mode = stylus.PEN; stylus.pen.setWidth(2); }
+    void useEraser() { endCurrentStroke(); stylus.mode = stylus.ERASER; stylus.pen.setWidth(10); }
 
     bool setCurrentPage(int index);
 
@@ -201,16 +213,10 @@ public slots:
     void layerUp();
     void layerDown();
 
-    void mousePressEvent(QMouseEvent *);
-    void mouseMoveEvent(QMouseEvent *);
-    void mouseReleaseEvent(QMouseEvent *);
+    void touchEventDataReceived(const QPoint &pos, int pressure);
 
     void setViewSize(const QSize &size) { currentViewSize = size; }
 private:
-    enum ScribbleMode {
-        PEN, ERASER
-    };
-
     void initAfterLoad();
     void endCurrentStroke();
     void eraseAt(const QPointF &point);
@@ -221,15 +227,10 @@ private:
     int currentPage;
     int currentLayer;
 
-    QPen currentPen;
-
     /* used when a new page is created */
     QSize currentViewSize;
 
-    /* if currentMode == PEN && sketching then the last item in the current page
-     * and layer (exists and) is currently extended by mouse movements */
-    bool sketching;
-    ScribbleMode currentMode;
+    Stylus stylus;
 
     /* shortcut to last item of current layer (if it exists) */
     ScribbleStroke *currentStroke;

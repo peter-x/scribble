@@ -23,7 +23,8 @@
 
 #include <QtGui>
 
-#include "onyx/ui/status_bar.h"
+#include <onyx/ui/status_bar.h>
+#include <onyx/touch/touch_listener.h>
 
 #include "asyncwriter.h"
 #include "scribblearea.h"
@@ -44,7 +45,7 @@ public slots:
     void saveAsynchronously();
 
 private slots:
-    void touchEventDataReceived(TouchData &);
+    void touchEventDataReceived(const TouchData &);
     void mousePressEvent(QMouseEvent *ev);
     void mouseMoveEvent(QMouseEvent *ev);
     void mouseReleaseEvent(QMouseEvent *ev);

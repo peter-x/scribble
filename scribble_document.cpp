@@ -431,11 +431,11 @@ void ScribbleDocument::initAfterLoad()
     currentPage = 0;
     currentLayer = getCurrentPage().layers.length() - 1;
 
-    sketching = false;
+    stylus.sketching = false;
+    stylus.mode = stylus.PEN;
     currentStroke = 0;
-    currentMode = PEN;
-    currentPen.setColor(QColor(0, 0, 0));
-    currentPen.setWidth(2);
+    stylus.pen.setColor(QColor(0, 0, 0));
+    stylus.pen.setWidth(2);
 
     changedSinceLastSave = false;
 
@@ -445,16 +445,16 @@ void ScribbleDocument::initAfterLoad()
 
 void ScribbleDocument::endCurrentStroke()
 {
-    if (!sketching) return;
+    if (!stylus.sketching) return;
 
-    if (currentMode == PEN) {
+    if (stylus.mode == stylus.PEN) {
         if (currentStroke != 0 && currentStroke->getPoints().size() == 1) {
             currentStroke->appendPoint(currentStroke->getPoints()[0]);
         }
         emit strokeCompleted(*currentStroke);
         currentStroke = 0;
     }
-    sketching = false;
+    stylus.sketching = false;
 }
 
 bool ScribbleDocument::setCurrentPage(int index)
@@ -514,58 +514,43 @@ void ScribbleDocument::layerDown()
     emit pageOrLayerChanged(getCurrentPage(), currentLayer);
 }
 
-void ScribbleDocument::mousePressEvent(QMouseEvent *event)
+void ScribbleDocument::touchEventDataReceived(const QPoint &pos, int pressure)
 {
-    if (sketching) /* should not happen */
+    if (!QRect(QPoint(0, 0), currentViewSize).contains(pos)) {
         endCurrentStroke();
-
-    sketching = true;
-    if (currentMode == PEN) {
-        ScribbleLayer &l = pages[currentPage].layers[currentLayer];
-        l.items.append(ScribbleStroke(currentPen, QPolygonF()));
-        currentStroke = &l.items.last();
-        currentStroke->appendPoint(event->posF());
-        pages[currentPage].invalidate();
-        changedSinceLastSave = true;
-        emit strokePointAdded(*currentStroke);
-    } else {
-        eraseAt(event->pos());
+        return;
     }
-}
 
-void ScribbleDocument::mouseMoveEvent(QMouseEvent *event)
-{
-    if (!sketching) return;
-    if (currentMode == PEN) {
-        currentStroke->appendPoint(event->posF());
-        pages[currentPage].invalidate();
-        changedSinceLastSave = true;
-        emit strokePointAdded(*currentStroke);
-    } else {
-        eraseAt(event->pos());
+    if (stylus.mode == stylus.ERASER) {
+        if (pressure > 0) {
+            stylus.sketching = true;
+            eraseAt(pos);
+        } else {
+            stylus.sketching = false;
+        }
+    } else if (stylus.mode == stylus.PEN){
+        if (pressure > 0) {
+            if (!stylus.sketching) {
+                stylus.sketching = true;
+                ScribbleLayer &l = pages[currentPage].layers[currentLayer];
+                l.items.append(ScribbleStroke(stylus.pen, QPolygonF()));
+                currentStroke = &l.items.last();
+            }
+            currentStroke->appendPoint(pos);
+            pages[currentPage].invalidate();
+            changedSinceLastSave = true;
+            emit strokePointAdded(*currentStroke);
+        } else if (stylus.sketching) {
+            endCurrentStroke();
+        }
     }
-}
-
-void ScribbleDocument::mouseReleaseEvent(QMouseEvent *event)
-{
-    if (!sketching) return;
-
-    if (currentMode == PEN) {
-        currentStroke->appendPoint(event->posF());
-        pages[currentPage].invalidate();
-        changedSinceLastSave = true;
-        emit strokePointAdded(*currentStroke);
-    } else {
-        eraseAt(event->pos());
-    }
-    endCurrentStroke();
 }
 
 void ScribbleDocument::eraseAt(const QPointF &point)
 {
     ScribbleLayer &layer = pages[currentPage].layers[currentLayer];
 
-    qreal width = currentPen.widthF();
+    qreal width = stylus.pen.widthF();
     QRectF eraserBox;
     eraserBox.setSize(QSizeF(width, width));
     eraserBox.moveCenter(point);
