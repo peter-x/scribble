@@ -164,6 +164,7 @@ void FileBrowser::updateTreeView()
     treeView.setModel(&model);
     statusBar.setProgress(treeView.currentPage(), treeView.pages());
     update();
+    onyx::screen::instance().flush(this, onyx::screen::ScreenProxy::GC);
 }
 
 void FileBrowser::updateModel()
@@ -266,6 +267,7 @@ void FileBrowser::onStatusBarClicked(const int percentage, const int page)
 {
     Q_UNUSED(percentage);
     treeView.jumpToPage(page);
+    onyx::screen::instance().flush(this, onyx::screen::ScreenProxy::GC);
 }
 
 void FileBrowser::onBreadCrumbActivated()
